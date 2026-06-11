@@ -148,7 +148,6 @@ async def run_daemon(hotkey_code, model_path):
             if event.value == 1:
                 held.add(event.code)
                 if keys_held(held) and proc is None:
-                    dev.grab()
                     proc = subprocess.Popen(
                         ["parec", "--format=s16le", "--rate=16000",
                          "--channels=1", "--file-format=wav", AUDIO],
@@ -157,7 +156,6 @@ async def run_daemon(hotkey_code, model_path):
             elif event.value == 0:
                 held.discard(event.code)
                 if proc is not None:
-                    dev.ungrab()
                     await transcribe(proc, model_path)
                     proc = None
         else:
