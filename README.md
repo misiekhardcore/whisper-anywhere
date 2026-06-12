@@ -90,7 +90,6 @@ Set via config or `--model`.
 
 > **Performance**: faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU with comparable accuracy.
 
-
 ## Project layout
 
 ```
