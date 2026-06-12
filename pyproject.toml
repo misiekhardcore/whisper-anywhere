@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "whisper-anywhere"
+version = "1.0.0"
+description = "Hold a hotkey, speak, release - text appears wherever the cursor is"
+requires-python = ">=3.10"
+
+[project.scripts]
+whisper-anywhere = "whisper_anywhere.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["whisper_anywhere*"]

@@ -2,7 +2,6 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-DAEMON="$REPO_DIR/whisper-anywhere"
 BIN_DIR="$HOME/.local/bin"
 BIN_TARGET="$BIN_DIR/whisper-anywhere"
 CONFIG_DIR="$HOME/.config/whisper-anywhere"
@@ -100,13 +99,12 @@ sys.stderr.write('Model $MODEL ready.\n')
 "
 }
 
-step_install_daemon() {
+step_install_package() {
     echo ""
-    echo "==> Installing whisper-anywhere script..."
-    mkdir -p "$BIN_DIR"
-    cp "$DAEMON" "$BIN_TARGET"
-    chmod +x "$BIN_TARGET"
-    info "installed to $BIN_TARGET"
+    echo "==> Installing whisper-anywhere package..."
+    pip3 install --user -e "$REPO_DIR" 2>/dev/null \
+        || pip3 install --user --break-system-packages -e "$REPO_DIR"
+    info "installed as pip package from $REPO_DIR"
 }
 
 step_autostart() {
@@ -200,8 +198,8 @@ step_system_packages
 step_input_group
 step_ydotool_service
 step_python_packages
+step_install_package
 step_model
-step_install_daemon
 step_autostart
 step_config
 summary
