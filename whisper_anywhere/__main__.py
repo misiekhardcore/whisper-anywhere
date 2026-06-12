@@ -65,8 +65,7 @@ async def transcribe(proc, read_task, buffer, model, language=None):
     write_wav(AUDIO, buffer)
 
     def _run():
-        segments, _ = model.transcribe(AUDIO, beam_size=5, language=language)
-        return " ".join(segment.text.strip() for segment in segments)
+        return model.transcribe(AUDIO, language=language)
 
     text = await asyncio.get_event_loop().run_in_executor(None, _run)
     return text
@@ -217,11 +216,12 @@ def main():
     else:
         mode_str = "combo (Ctrl+Super+Space)"
 
-    from .transcribe import load_model, DEFAULT_MODEL
+    from .transcribe import load_model, FASTER_WHISPER_DEFAULT
 
-    check_deps()
-    model_id = args.model or cfg.get("model", DEFAULT_MODEL)
-    model = load_model(model_id)
+    engine = args.engine or cfg.get("engine", "faster-whisper")
+    check_deps(engine)
+    model_id = args.model or cfg.get("model")
+    model = load_model(model_id, engine=engine)
 
     language = args.language or cfg.get("language") or None
     lang_str = language or "auto-detect"

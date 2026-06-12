@@ -125,8 +125,8 @@ class StubModel:
     def __init__(self, text):
         self._text = text
 
-    def transcribe(self, path, beam_size=5, language=None):
-        return [types.SimpleNamespace(text=self._text)], None
+    def transcribe(self, path, language=None):
+        return self._text
 
 
 @pytest.mark.asyncio

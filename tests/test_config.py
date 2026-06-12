@@ -104,6 +104,14 @@ class TestParseArgs:
         with patch.object(sys, "argv", ["whisper-anywhere", "--language", "pl"]):
             assert parse_args().language == "pl"
 
+    def test_engine_default_none(self):
+        with patch.object(sys, "argv", ["whisper-anywhere"]):
+            assert parse_args().engine is None
+
+    def test_custom_engine(self):
+        with patch.object(sys, "argv", ["whisper-anywhere", "--engine", "sensevoice"]):
+            assert parse_args().engine == "sensevoice"
+
 
 def test_config_dir_constant():
     assert CONFIG_DIR == os.path.expanduser("~/.config/whisper-anywhere")
