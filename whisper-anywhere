@@ -113,7 +113,7 @@ def keys_held(held):
 
 
 async def transcribe(proc, model):
-    proc.terminate()
+    proc.send_signal(signal.SIGINT)
     await asyncio.get_event_loop().run_in_executor(None, proc.wait)
 
     def _run():
