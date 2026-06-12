@@ -14,7 +14,7 @@ cd whisper-anywhere
 ./install.sh
 ```
 
-The daemon runs as a single Python script with no external Python dependencies beyond `python3-evdev`. System dependencies (`whisper.cpp`, `ydotool`, `pulseaudio-utils`) are installed by `install.sh`.
+The daemon runs as a single Python script with Python dependencies `python3-evdev` (apt) and `faster-whisper` (pip). System dependencies (`ydotool`, `pulseaudio-utils`) are installed by `install.sh`.
 
 ## Testing
 

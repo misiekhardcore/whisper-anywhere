@@ -2,13 +2,13 @@
 
 Hold a hotkey, speak, release — text appears in the focused window.
 
-Offline, local voice dictation for Linux using `whisper.cpp`. No cloud API, no data leaves your machine.
+Offline, local voice dictation for Linux using faster-whisper (CTranslate2). No cloud API, no data leaves your machine.
 
 ## How it works
 
 1. Hold a hotkey (default: `Ctrl+Super+Space`, configurable to a single key like `F12`)
 2. Speak — audio is recorded via PulseAudio
-3. Release — `whisper-cli` transcribes locally, `ydotool` types the text
+3. Release — faster-whisper transcribes locally, `ydotool` types the text
 
 ## Requirements
 
@@ -27,8 +27,11 @@ bash install.sh
 Or manually, step by step:
 
 ```bash
-# dependencies
-sudo apt install whisper.cpp pulseaudio-utils python3-evdev ydotool
+# system dependencies
+sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool
+
+# Python package
+pip3 install --user faster-whisper
 
 # input group for keyboard access
 sudo usermod -a -G input $USER
@@ -58,7 +61,7 @@ hotkey=KEY_F12
 # hotkey=
 
 # Model size
-model=ggml-base.en.bin
+model=distil-large-v3
 ```
 
 ### Command-line options
@@ -66,20 +69,22 @@ model=ggml-base.en.bin
 ```bash
 whisper-anywhere --hotkey KEY_F12     # single-key mode
 whisper-anywhere --hotkey KEY_GRAVE   # use backtick key
-whisper-anywhere --model ggml-small.en.bin
+whisper-anywhere --model distil-small.en
 ```
 
 ## Models
 
-Downloaded automatically from [whisper.cpp](https://github.com/ggerganov/whisper.cpp) on first run:
+Downloaded automatically from HuggingFace on first use (by [faster-whisper](https://github.com/SYSTRAN/faster-whisper)):
 
 | Model | Size | Quality |
 |---|---|---|
-| `ggml-base.en.bin` | 142 MB | Good (default) |
-| `ggml-small.en.bin` | 466 MB | Better |
-| `ggml-medium.en.bin` | 1.5 GB | Best |
+| `distil-large-v3` | 1.5 GB | Best (default) |
+| `distil-medium.en` | 300 MB | Better |
+| `distil-small.en` | 94 MB | Good |
 
 Set via config or `--model`.
+
+> **Performance**: faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU with comparable accuracy.
 
 ## Project layout
 

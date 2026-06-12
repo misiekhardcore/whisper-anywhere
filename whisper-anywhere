@@ -11,7 +11,7 @@ Common ones: KEY_F1..KEY_F12, KEY_GRAVE, KEY_SCROLLLOCK.
 
 Config file at ~/.config/whisper-anywhere/config:
   hotkey=KEY_F12
-  model=ggml-base.en.bin
+  model=distil-large-v3
 """
 
 import asyncio
@@ -21,10 +21,10 @@ import os
 import sys
 import argparse
 from evdev import InputDevice, list_devices, ecodes
+from faster_whisper import WhisperModel
 
 CONFIG_DIR = os.path.expanduser("~/.config/whisper-anywhere")
-MODEL_DIR = os.path.expanduser("~/.local/share/whisper/models")
-DEFAULT_MODEL = "ggml-base.en.bin"
+DEFAULT_MODEL = "distil-large-v3"
 AUDIO = "/tmp/whisper-anywhere.wav"
 
 CTRL = {ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL}
@@ -53,7 +53,7 @@ def find_keyboard():
 
 def check_deps():
     missing = []
-    for cmd in ("parec", "whisper-cli", "ydotool"):
+    for cmd in ("parec", "ydotool"):
         if not subprocess.run(["which", cmd], capture_output=True).returncode == 0:
             missing.append(cmd)
     if missing:
@@ -66,24 +66,18 @@ def check_deps():
     except ImportError:
         print("Missing python3-evdev. Run: pkexec apt install python3-evdev", file=sys.stderr)
         sys.exit(1)
-
-
-def resolve_model(model_name):
-    path = os.path.join(MODEL_DIR, model_name)
-    if os.path.exists(path):
-        return path
-    print(f"Model {model_name} not found at {path}", file=sys.stderr)
-    print("Downloading...", file=sys.stderr)
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    url = f"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{model_name}"
-    result = subprocess.run(["wget", "-q", "--show-progress", "-O", path, url])
-    if result.returncode != 0:
-        if os.path.exists(path):
-            os.remove(path)
-        print(f"Failed to download model from {url}", file=sys.stderr)
+    try:
+        from faster_whisper import WhisperModel  # noqa: F401
+    except ImportError:
+        print("Missing faster-whisper. Run: pip3 install --user faster-whisper", file=sys.stderr)
         sys.exit(1)
-    print(f"Downloaded {path}", file=sys.stderr)
-    return path
+
+
+def load_model(model_id):
+    print(f"Loading faster-whisper model '{model_id}'...", file=sys.stderr)
+    # Auto-downloads from HuggingFace on first use
+    model = WhisperModel(model_id, device="cpu", compute_type="int8")
+    return model
 
 
 def parse_args():
@@ -118,22 +112,20 @@ def keys_held(held):
     return bool(held & CTRL) and bool(held & SUPER) and bool(held & SPACE)
 
 
-async def transcribe(proc, model_path):
+async def transcribe(proc, model):
     proc.terminate()
     await asyncio.get_event_loop().run_in_executor(None, proc.wait)
-    result = await asyncio.get_event_loop().run_in_executor(
-        None,
-        lambda: subprocess.run(
-            ["whisper-cli", "-m", model_path, "-f", AUDIO, "-otxt", "-nt"],
-            capture_output=True, text=True,
-        ),
-    )
-    text = " ".join(result.stdout.strip().split())
-    if text and text != "[BLANK_AUDIO]":
+
+    def _run():
+        segments, _ = model.transcribe(AUDIO, beam_size=5)
+        return " ".join(segment.text.strip() for segment in segments)
+
+    text = await asyncio.get_event_loop().run_in_executor(None, _run)
+    if text:
         subprocess.run(["ydotool", "type", text])
 
 
-async def run_daemon(hotkey_code, model_path):
+async def run_daemon(hotkey_code, model):
     dev = find_keyboard()
     held = set()
     proc = None
@@ -156,7 +148,7 @@ async def run_daemon(hotkey_code, model_path):
             elif event.value == 0:
                 held.discard(event.code)
                 if proc is not None:
-                    await transcribe(proc, model_path)
+                    await transcribe(proc, model)
                     proc = None
         else:
             if event.code != hotkey_code:
@@ -168,7 +160,7 @@ async def run_daemon(hotkey_code, model_path):
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
             elif event.value == 0 and proc is not None:
-                await transcribe(proc, model_path)
+                await transcribe(proc, model)
                 proc = None
 
 
@@ -190,12 +182,12 @@ def main():
     else:
         mode_str = "combo (Ctrl+Super+Space)"
 
-    model_name = args.model or cfg.get("model", DEFAULT_MODEL)
     check_deps()
-    model_path = resolve_model(model_name)
+    model_id = args.model or cfg.get("model", DEFAULT_MODEL)
+    model = load_model(model_id)
 
     print(f"whisper-anywhere ready — mode: {mode_str}", file=sys.stderr)
-    asyncio.run(run_daemon(hotkey_code, model_path))
+    asyncio.run(run_daemon(hotkey_code, model))
 
 
 if __name__ == "__main__":

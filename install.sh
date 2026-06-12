@@ -7,8 +7,7 @@ BIN_DIR="$HOME/.local/bin"
 BIN_TARGET="$BIN_DIR/whisper-anywhere"
 CONFIG_DIR="$HOME/.config/whisper-anywhere"
 AUTOSTART_DIR="$HOME/.config/autostart"
-MODEL_DIR="$HOME/.local/share/whisper/models"
-MODEL="${MODEL:-ggml-base.en.bin}"
+MODEL="${MODEL:-distil-large-v3}"
 HOTKEY="${HOTKEY:-}"
 
 # ---------------------------------------------------------------------------
@@ -45,11 +44,10 @@ step_system_packages() {
     echo ""
     echo "==> Installing system packages..."
     pkg_install \
-        whisper.cpp \
         pulseaudio-utils \
         python3-evdev \
-        ydotool \
-        wget
+        python3-pip \
+        ydotool
 
     # wl-clipboard is optional but useful
     if command -v wl-copy &>/dev/null; then
@@ -58,6 +56,13 @@ step_system_packages() {
         info "installing wl-clipboard (optional, for clipboard-based typing fallback)"
         pkg_install wl-clipboard || true
     fi
+}
+
+step_python_packages() {
+    echo ""
+    echo "==> Installing Python packages..."
+    pip3 install --user faster-whisper 2>/dev/null \
+        || pip3 install --user --break-system-packages faster-whisper
 }
 
 step_input_group() {
@@ -84,17 +89,15 @@ step_ydotool_service() {
 
 step_model() {
     echo ""
-    echo "==> Downloading whisper model ($MODEL)..."
-    mkdir -p "$MODEL_DIR"
-    if [ -f "$MODEL_DIR/$MODEL" ]; then
-        info "model already exists at $MODEL_DIR/$MODEL"
-    else
-        info "downloading from huggingface..."
-        wget -q --show-progress \
-            -O "$MODEL_DIR/$MODEL" \
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$MODEL"
-        info "downloaded $MODEL_DIR/$MODEL"
-    fi
+    echo "==> Pre-loading whisper model ($MODEL)..."
+    # faster-whisper auto-downloads on first use; this pre-warms the cache
+    python3 -c "
+from faster_whisper import WhisperModel
+import sys
+sys.stderr.write('Downloading model $MODEL...\n')
+m = WhisperModel('$MODEL', device='cpu', compute_type='int8')
+sys.stderr.write('Model $MODEL ready.\n')
+"
 }
 
 step_install_daemon() {
@@ -141,9 +144,9 @@ step_config() {
 # hotkey=KEY_GRAVE
 #
 # Uncomment to use a different model:
-# model=ggml-base.en.bin
-# model=ggml-small.en.bin
-# model=ggml-medium.en.bin
+# model=distil-large-v3
+# model=distil-medium.en
+# model=distil-small.en
 EOF
         if [ -n "$HOTKEY" ]; then
             echo "hotkey=$HOTKEY" >> "$CONFIG_DIR/config"
@@ -180,6 +183,8 @@ summary() {
     echo "  To start now:"
     echo "    $ whisper-anywhere &"
     echo ""
+    echo "  Note: The first run downloads the model — may take a moment."
+    echo ""
 }
 
 # ---------------------------------------------------------------------------
@@ -194,6 +199,7 @@ need_root
 step_system_packages
 step_input_group
 step_ydotool_service
+step_python_packages
 step_model
 step_install_daemon
 step_autostart
