@@ -31,7 +31,10 @@ Or manually, step by step:
 sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool
 
 # Python package
-pip3 install --user faster-whisper
+python3 -m pip install --user faster-whisper
+
+# install whisper-anywhere itself
+python3 -m pip install --user -e .
 
 # input group for keyboard access
 sudo usermod -a -G input $USER
@@ -90,8 +93,16 @@ Set via config or `--model`.
 
 ```
 whisper-anywhere/
-├── whisper-anywhere    # the daemon (single Python script)
-├── install.sh          # one-shot installer
+├── whisper_anywhere/    # Python package
+│   ├── __main__.py      # daemon entry point
+│   ├── audio.py         # audio capture and WAV writing
+│   ├── config.py        # configuration and CLI args
+│   ├── keyboard.py      # evdev keyboard detection
+│   └── transcribe.py    # model loading
+├── tests/               # pytest suite
+├── install.sh           # one-shot installer
+├── Makefile             # development commands
+├── pyproject.toml       # package metadata
 ├── README.md
 ├── CONTRIBUTING.md
 └── LICENSE

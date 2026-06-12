@@ -14,11 +14,26 @@ cd whisper-anywhere
 ./install.sh
 ```
 
-The daemon runs as a single Python script with Python dependencies `python3-evdev` (apt) and `faster-whisper` (pip). System dependencies (`ydotool`, `pulseaudio-utils`) are installed by `install.sh`.
+The daemon is a Python package with runtime dependencies `python3-evdev` (apt) and `faster-whisper` (pip). System dependencies (`ydotool`, `pulseaudio-utils`) are installed by `install.sh`.
+
+## Development commands
+
+```bash
+make install-deps   # install test/build dependencies
+make test           # run pytest suite
+make build          # build sdist + wheel
+make clean          # remove build artifacts
+```
 
 ## Testing
 
-Test the daemon manually:
+Run the unit tests:
+
+```bash
+make test
+```
+
+For manual testing:
 
 ```bash
 whisper-anywhere

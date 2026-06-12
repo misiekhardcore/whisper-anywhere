@@ -1,0 +1,23 @@
+.PHONY: test install install-deps clean build
+
+PYTHON ?= $(shell which python3)
+PYTEST ?= PYTHONPATH="/usr/lib/python3/dist-packages:$$PYTHONPATH" $(PYTHON) -m pytest
+
+test:
+	$(PYTEST) -v tests/
+
+install:
+	$(PYTHON) -m pip install --user -e . 2>/dev/null \
+		|| $(PYTHON) -m pip install --user --break-system-packages -e .
+
+install-deps:
+	$(PYTHON) -m pip install --user evdev pytest pytest-asyncio build 2>/dev/null; \
+	$(PYTHON) -m pip install --user --break-system-packages evdev pytest pytest-asyncio build 2>/dev/null || true
+
+build: install-deps
+	$(PYTHON) -m build
+
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name '*.pyc' -delete
+	rm -rf .pytest_cache dist *.egg-info

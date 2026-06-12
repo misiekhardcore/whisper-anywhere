@@ -2,23 +2,32 @@
 
 ## Project overview
 
-Single-script Linux voice dictation daemon. Hold a hotkey, speak, release — text appears wherever the cursor is. Uses `faster-whisper` for transcription, `parec` for audio capture, `ydotool` for keystroke injection, and `evdev` for keyboard event reading.
+Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, release — text appears wherever the cursor is. Uses `faster-whisper` for transcription, `parec` for audio capture, `ydotool` for keystroke injection, and `evdev` for keyboard event reading.
 
-## No build system, no tests, no CI
+## Tests and CI
 
-- There is no `pyproject.toml`, `requirements.txt`, `Makefile`, or CI pipeline.
-- Do **not** add a package manager, build system, or test framework unless the user asks.
-- There are no automated tests. Manual testing only: run `whisper-anywhere`, hold the hotkey, speak, verify text appears.
+- 39 unit tests across `audio.py`, `config.py`, and `keyboard.py`. Run with `make test`.
+- CI runs on push/PR via `.github/workflows/ci.yml` — two jobs: `test` (pytest) and `build` (sdist + wheel).
+- The project uses `setuptools` via `pyproject.toml` with a `console_scripts` entry point. Install with `python3 -m pip install --user -e .`.
 
 ## External Python packages
 
 - `evdev` — comes from the system package `python3-evdev` (apt). Must use apt because evdev needs to access `/dev/input/` devices.
-- `faster-whisper` — installed via `pip3 install --user faster-whisper` (PyPI). Provides CTranslate2-accelerated transcription.
+- `faster-whisper` — installed via `pip install --user faster-whisper` (PyPI). Provides CTranslate2-accelerated transcription.
 
-## The script file *is* the daemon
+## Package structure
 
-- `whisper-anywhere` (no `.py` extension) is the entire application. It is installed as an executable in `~/.local/bin/`.
-- Shebang: `#!/usr/bin/python3`
+The daemon is a Python package `whisper_anywhere/` installed via `pip install -e .`. The `console_scripts` entry point creates a `whisper-anywhere` wrapper in `~/.local/bin/`.
+
+```
+whisper_anywhere/
+├── __init__.py
+├── __main__.py      # entry point: main(), run_daemon(), transcribe()
+├── audio.py         # write_wav(), read_audio()
+├── config.py        # check_deps(), load_config(), parse_args()
+├── keyboard.py      # find_keyboard(), keys_held()
+└── transcribe.py    # load_model()
+```
 
 ## System dependencies (apt only)
 
@@ -43,7 +52,12 @@ Single-script Linux voice dictation daemon. Hold a hotkey, speak, release — te
 - `find_keyboard()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
 - `check_deps()` — verifies `parec`, `ydotool` are on PATH and `evdev`/`faster_whisper` import works
 - `load_model()` — initializes faster-whisper `WhisperModel` (auto-downloads from HuggingFace on first use)
-- `run_daemon()` — async evdev read loop; holds `parec` subprocess while hotkey pressed, runs `model.transcribe()` on release, types via `ydotool`
+- `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
+- `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
+- `transcribe()` — sends SIGINT to `parec`, drains remaining audio via `read_audio`, writes WAV, runs model, types with `ydotool`
+- `run_daemon()` — async evdev read loop; spawns `parec --raw` as an `asyncio.subprocess` on hotkey press, pipes audio through `read_audio` into a `bytearray` buffer, calls `transcribe()` on release
+- Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample
+- `parec` is started with `--latency-msec=30` to shrink PulseAudio's internal capture buffer from ~250ms to 30ms, so the tail loss on SIGINT is imperceptible
 - Two hotkey modes: combo (Ctrl+Super+Space, all three must be held) or single-key (any `KEY_*` from `linux/input-event-codes.h`)
 - Hotkey priority: CLI `--hotkey` > config file `hotkey=` > default combo
 - Model priority: CLI `--model` > config file `model=` > `distil-large-v3`

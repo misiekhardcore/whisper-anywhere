@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whisper-anywhere"
+version = "1.0.0"
+description = "Hold a hotkey, speak, release - text appears wherever the cursor is"
+requires-python = ">=3.14"
+
+[project.scripts]
+whisper-anywhere = "whisper_anywhere.__main__:main"
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "build"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.setuptools.packages.find]
+include = ["whisper_anywhere*"]
