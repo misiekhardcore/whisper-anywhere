@@ -21,7 +21,7 @@ jobs:
         run: make install-deps
 
       - name: Run tests
-        run: make test
+        run: python3 -m pytest -v tests/
 
   build:
     runs-on: ubuntu-latest

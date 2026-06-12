@@ -2,17 +2,18 @@
 
 ## Project overview
 
-Single-script Linux voice dictation daemon. Hold a hotkey, speak, release — text appears wherever the cursor is. Uses `faster-whisper` for transcription, `parec` for audio capture, `ydotool` for keystroke injection, and `evdev` for keyboard event reading.
+Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, release — text appears wherever the cursor is. Uses `faster-whisper` for transcription, `parec` for audio capture, `ydotool` for keystroke injection, and `evdev` for keyboard event reading.
 
-## No tests, no CI
+## Tests and CI
 
-- There are no automated tests. Manual testing only: run `whisper-anywhere`, hold the hotkey, speak, verify text appears.
-- The project uses `setuptools` via `pyproject.toml` with a `console_scripts` entry point. Install with `pip3 install --user -e .`.
+- 39 unit tests across `audio.py`, `config.py`, and `keyboard.py`. Run with `make test`.
+- CI runs on push/PR via `.github/workflows/ci.yml` — two jobs: `test` (pytest) and `build` (sdist + wheel).
+- The project uses `setuptools` via `pyproject.toml` with a `console_scripts` entry point. Install with `python3 -m pip install --user -e .`.
 
 ## External Python packages
 
 - `evdev` — comes from the system package `python3-evdev` (apt). Must use apt because evdev needs to access `/dev/input/` devices.
-- `faster-whisper` — installed via `pip3 install --user faster-whisper` (PyPI). Provides CTranslate2-accelerated transcription.
+- `faster-whisper` — installed via `pip install --user faster-whisper` (PyPI). Provides CTranslate2-accelerated transcription.
 
 ## Package structure
 
