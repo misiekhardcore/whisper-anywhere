@@ -47,7 +47,7 @@ async def run_daemon(hotkey_code, model):
                     buffer = bytearray()
                     proc = await asyncio.create_subprocess_exec(
                         "parec", "--format=s16le", "--rate=16000",
-                        "--channels=1", "--raw",
+                        "--channels=1", "--raw", "--latency-msec=30",
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.DEVNULL,
                     )
@@ -66,7 +66,7 @@ async def run_daemon(hotkey_code, model):
                 buffer = bytearray()
                 proc = await asyncio.create_subprocess_exec(
                     "parec", "--format=s16le", "--rate=16000",
-                    "--channels=1", "--raw",
+                    "--channels=1", "--raw", "--latency-msec=30",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.DEVNULL,
                 )

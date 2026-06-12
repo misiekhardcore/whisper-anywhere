@@ -55,7 +55,8 @@ whisper_anywhere/
 - `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
 - `transcribe()` — sends SIGINT to `parec`, drains remaining audio via `read_audio`, writes WAV, runs model, types with `ydotool`
 - `run_daemon()` — async evdev read loop; spawns `parec --raw` as an `asyncio.subprocess` on hotkey press, pipes audio through `read_audio` into a `bytearray` buffer, calls `transcribe()` on release
-- Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample without artificial timeouts
+- Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample
+- `parec` is started with `--latency-msec=30` to shrink PulseAudio's internal capture buffer from ~250ms to 30ms, so the tail loss on SIGINT is imperceptible
 - Two hotkey modes: combo (Ctrl+Super+Space, all three must be held) or single-key (any `KEY_*` from `linux/input-event-codes.h`)
 - Hotkey priority: CLI `--hotkey` > config file `hotkey=` > default combo
 - Model priority: CLI `--model` > config file `model=` > `distil-large-v3`
