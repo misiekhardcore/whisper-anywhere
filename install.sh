@@ -65,6 +65,12 @@ step_python_packages() {
         || "$PYTHON" -m pip install --user --break-system-packages faster-whisper
 }
 
+step_bridge_system_packages() {
+    "$PYTHON" -c "import evdev" 2>/dev/null && return
+    echo /usr/lib/python3/dist-packages > "$("$PYTHON" -c "import sysconfig; print(sysconfig.get_path('purelib'))")/system_dist_packages.pth"
+    info "bridged evdev from system dist-packages"
+}
+
 step_input_group() {
     echo ""
     echo "==> Adding user to 'input' group (needed for keyboard event access)..."
@@ -196,6 +202,7 @@ echo "  ========================="
 
 need_root
 step_system_packages
+step_bridge_system_packages
 step_input_group
 step_ydotool_service
 step_python_packages
