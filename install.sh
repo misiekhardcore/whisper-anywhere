@@ -8,6 +8,7 @@ CONFIG_DIR="$HOME/.config/whisper-anywhere"
 AUTOSTART_DIR="$HOME/.config/autostart"
 MODEL="${MODEL:-distil-large-v3}"
 HOTKEY="${HOTKEY:-}"
+PYTHON="${PYTHON:-$(which python3)}"
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -60,8 +61,8 @@ step_system_packages() {
 step_python_packages() {
     echo ""
     echo "==> Installing Python packages..."
-    pip3 install --user faster-whisper 2>/dev/null \
-        || pip3 install --user --break-system-packages faster-whisper
+    "$PYTHON" -m pip install --user faster-whisper 2>/dev/null \
+        || "$PYTHON" -m pip install --user --break-system-packages faster-whisper
 }
 
 step_input_group() {
@@ -90,7 +91,7 @@ step_model() {
     echo ""
     echo "==> Pre-loading whisper model ($MODEL)..."
     # faster-whisper auto-downloads on first use; this pre-warms the cache
-    python3 -c "
+    "$PYTHON" -c "
 from faster_whisper import WhisperModel
 import sys
 sys.stderr.write('Downloading model $MODEL...\n')
@@ -102,8 +103,8 @@ sys.stderr.write('Model $MODEL ready.\n')
 step_install_package() {
     echo ""
     echo "==> Installing whisper-anywhere package..."
-    pip3 install --user -e "$REPO_DIR" 2>/dev/null \
-        || pip3 install --user --break-system-packages -e "$REPO_DIR"
+    "$PYTHON" -m pip install --user -e "$REPO_DIR" 2>/dev/null \
+        || "$PYTHON" -m pip install --user --break-system-packages -e "$REPO_DIR"
     info "installed as pip package from $REPO_DIR"
 }
 
