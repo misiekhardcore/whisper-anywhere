@@ -47,24 +47,6 @@ whisper_anywhere/
 - Models: `~/.local/share/whisper/models/`
 - Temp audio: `/tmp/whisper-anywhere.wav`
 
-## opencode plugin
-
-An opencode plugin lives at a [separate repo](https://github.com/misiekhardcore/whisper-anywhere-opencode). Install it globally so it works in any project:
-
-```bash
-git clone https://github.com/misiekhardcore/whisper-anywhere-opencode
-mkdir -p ~/.config/opencode/plugins
-cp whisper-anywhere-opencode/whisper-anywhere.ts ~/.config/opencode/plugins/
-```
-
-The plugin:
-- Spawns `whisper-anywhere --stdout` as a child process
-- Reads JSON lines from stdout: `{"text": "..."}`
-- Injects text into TUI via `client.tui.appendPrompt()`
-- Registers `/voice` toggle command
-- Falls back to ydotool when the plugin is not connected (via `--stdout` flag logic)
-
-The plugin is auto-discovered by opencode when placed in `~/.config/opencode/plugins/`.
 
 The plugin is auto-discovered by opencode when placed in `.opencode/plugins/`.
 
