@@ -1,5 +1,7 @@
 import asyncio
+import atexit
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -9,7 +11,35 @@ from evdev import ecodes
 from .audio import write_wav, read_audio, AUDIO
 from .config import check_deps, load_config, parse_args, handler
 from .keyboard import find_keyboard, keys_held, WANTED_MODS
-from .transcribe import load_model, DEFAULT_MODEL
+
+LOCK_PATH = "/tmp/whisper-anywhere.lock"
+_lock_fd = None
+
+
+def acquire_lock():
+    global _lock_fd
+    try:
+        import fcntl
+    except ImportError:
+        return
+    _lock_fd = open(LOCK_PATH, "w")
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("Another instance is already running.", file=sys.stderr)
+        sys.exit(1)
+    atexit.register(_remove_lock)
+
+
+def _remove_lock():
+    global _lock_fd
+    if _lock_fd is None:
+        return
+    try:
+        os.remove(LOCK_PATH)
+    except OSError:
+        pass
+    _lock_fd = None
 
 
 async def transcribe(proc, read_task, buffer, model):
@@ -95,6 +125,8 @@ def main():
     signal.signal(signal.SIGINT, handler)
     signal.signal(signal.SIGTERM, handler)
 
+    acquire_lock()
+
     args = parse_args()
     cfg = load_config()
     stdout_mode = args.stdout or cfg.get("stdout") in ("1", "true", "yes")
@@ -109,6 +141,8 @@ def main():
         mode_str = f"single-key ({hotkey_arg})"
     else:
         mode_str = "combo (Ctrl+Super+Space)"
+
+    from .transcribe import load_model, DEFAULT_MODEL
 
     check_deps()
     model_id = args.model or cfg.get("model", DEFAULT_MODEL)
