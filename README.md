@@ -73,8 +73,10 @@ model=distil-medium.en
 whisper-anywhere --hotkey KEY_F12     # single-key mode
 whisper-anywhere --hotkey KEY_GRAVE   # use backtick key
 whisper-anywhere --model distil-small.en
-whisper-anywhere --stdout             # JSON lines for opencode plugin
+whisper-anywhere --stdout             # JSON lines output (for opencode plugin)
 ```
+
+> **opencode plugin**: [whisper-anywhere-opencode](https://github.com/misiekhardcore/whisper-anywhere-opencode) integrates dictation into the opencode TUI. Install via `npm install -g whisper-anywhere-opencode` and add to `opencode.json`.
 
 ## Models
 
