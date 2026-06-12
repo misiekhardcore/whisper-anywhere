@@ -49,7 +49,14 @@ whisper_anywhere/
 
 ## opencode plugin
 
-An opencode plugin lives at `.opencode/plugins/whisper-anywhere.ts`:
+An opencode plugin lives at `.opencode/plugins/whisper-anywhere.ts`. Install it globally so it works in any project:
+
+```bash
+mkdir -p ~/.config/opencode/plugins
+cp .opencode/plugins/whisper-anywhere.ts ~/.config/opencode/plugins/
+```
+
+The plugin:
 - Spawns `whisper-anywhere --stdout` as a child process
 - Reads JSON lines from stdout: `{"text": "..."}`
 - Injects text into TUI via `client.tui.appendPrompt()`

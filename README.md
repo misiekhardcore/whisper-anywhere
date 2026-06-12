@@ -96,6 +96,29 @@ whisper-anywhere integrates with [opencode](https://opencode.ai) via the `--stdo
 
 When the plugin loads, it spawns `whisper-anywhere --stdout` as a child process. Transcribed text is injected directly into the TUI chat input instead of being typed via ydotool. Use `/voice` to toggle dictation on/off.
 
+### Install the plugin
+
+The plugin is auto-installed globally by `install.sh`. To install manually:
+
+```bash
+# create the opencode plugins directory
+mkdir -p ~/.config/opencode/plugins
+
+# copy the plugin
+cp .opencode/plugins/whisper-anywhere.ts ~/.config/opencode/plugins/
+```
+
+opencode auto-discovers plugins in `~/.config/opencode/plugins/` — no config changes needed.
+
+### Usage in opencode
+
+1. Start opencode from any project directory
+2. The plugin spawns `whisper-anywhere --stdout` automatically on load
+3. Press your configured hotkey to dictate — text appears in the TUI chat input
+4. Type `/voice` to toggle dictation on/off (shows a toast notification)
+
+> **Note**: When the plugin is active, transcribed text goes to the opencode TUI instead of being typed via ydotool. Close opencode or unload the plugin to revert to normal ydotool behavior.
+
 ## Project layout
 
 ```
