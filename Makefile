@@ -17,9 +17,6 @@ install-deps:
 build: install-deps
 	$(PYTHON) -m build
 
-build: install-deps
-	$(PYTHON) -m build
-
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name '*.pyc' -delete
