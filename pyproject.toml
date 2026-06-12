@@ -11,5 +11,8 @@ requires-python = ">=3.10"
 [project.scripts]
 whisper-anywhere = "whisper_anywhere.__main__:main"
 
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+
 [tool.setuptools.packages.find]
 include = ["whisper_anywhere*"]

@@ -28,11 +28,12 @@ def check_deps():
         sys.exit(1)
 
 
-def load_config():
-    cfg_path = os.path.join(CONFIG_DIR, "config")
+def load_config(path=None):
+    if path is None:
+        path = os.path.join(CONFIG_DIR, "config")
     cfg = {}
-    if os.path.exists(cfg_path):
-        with open(cfg_path) as f:
+    if os.path.exists(path):
+        with open(path) as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
