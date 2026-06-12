@@ -90,29 +90,6 @@ Set via config or `--model`.
 
 > **Performance**: faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU with comparable accuracy.
 
-## opencode plugin
-
-whisper-anywhere integrates with [opencode](https://opencode.ai) via the separate repo [whisper-anywhere-opencode](https://github.com/misiekhardcore/whisper-anywhere-opencode).
-
-The plugin spawns `whisper-anywhere --stdout` as a child process. Transcribed text is injected directly into the TUI chat input instead of being typed via ydotool. Use `/voice` to toggle dictation on/off.
-
-### Install
-
-```bash
-git clone https://github.com/misiekhardcore/whisper-anywhere-opencode
-mkdir -p ~/.config/opencode/plugins
-cp whisper-anywhere-opencode/whisper-anywhere.ts ~/.config/opencode/plugins/
-```
-
-opencode auto-discovers plugins in `~/.config/opencode/plugins/` — no config changes needed.
-
-### Usage
-
-1. Start opencode — the plugin spawns `whisper-anywhere --stdout` automatically
-2. Press your configured hotkey to dictate — text appears in the TUI chat input
-3. Type `/voice` to toggle dictation on/off
-
-> **Note**: When the plugin is active, transcribed text goes to the opencode TUI. Close opencode to revert to normal ydotool behavior.
 
 ## Project layout
 
