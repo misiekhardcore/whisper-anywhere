@@ -17,6 +17,9 @@ async def transcribe(proc, read_task, buffer, model):
     await read_task
     await proc.wait()
 
+    if not buffer:
+        return ""
+
     write_wav(AUDIO, buffer)
 
     def _run():

@@ -6,6 +6,9 @@ SAMPLE_RATE = 16000
 
 def write_wav(path, data, sample_rate=SAMPLE_RATE, sample_width=2, channels=1):
     data_size = len(data)
+    if data_size % sample_width != 0:
+        data_size -= data_size % sample_width
+        data = data[:data_size]
     with open(path, "wb") as f:
         f.write(b"RIFF")
         f.write(struct.pack("<I", 36 + data_size))
