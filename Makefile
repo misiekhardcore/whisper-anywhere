@@ -7,8 +7,8 @@ test:
 	$(PYTEST) -v tests/
 
 install:
-	pip3 install --user -e . 2>/dev/null \
-		|| pip3 install --user --break-system-packages -e .
+	$(PYTHON) -m pip install --user -e . 2>/dev/null \
+		|| $(PYTHON) -m pip install --user --break-system-packages -e .
 
 install-deps:
 	$(PYTHON) -m pip install --user evdev pytest pytest-asyncio build 2>/dev/null; \
