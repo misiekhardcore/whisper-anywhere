@@ -47,9 +47,6 @@ whisper_anywhere/
 - Models: `~/.local/share/whisper/models/`
 - Temp audio: `/tmp/whisper-anywhere.wav`
 
-
-The plugin is auto-discovered by opencode when placed in `.opencode/plugins/`.
-
 ## Script architecture
 
 - `find_keyboard()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
