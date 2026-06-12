@@ -162,20 +162,6 @@ EOF
     fi
 }
 
-step_opencode_plugin() {
-    echo ""
-    echo "==> Installing opencode plugin..."
-    OPENCODE_PLUGIN_DIR="$HOME/.config/opencode/plugins"
-    mkdir -p "$OPENCODE_PLUGIN_DIR"
-    if [ -f "$OPENCODE_PLUGIN_DIR/whisper-anywhere.ts" ]; then
-        info "opencode plugin already installed at $OPENCODE_PLUGIN_DIR/whisper-anywhere.ts"
-    else
-        cp "$REPO_DIR/.opencode/plugins/whisper-anywhere.ts" "$OPENCODE_PLUGIN_DIR/whisper-anywhere.ts"
-        info "opencode plugin installed at $OPENCODE_PLUGIN_DIR/whisper-anywhere.ts"
-        info "  (auto-discovered by opencode — no config needed)"
-    fi
-}
-
 summary() {
     echo ""
     echo "============================================"
@@ -224,5 +210,4 @@ step_install_package
 step_model
 step_autostart
 step_config
-step_opencode_plugin
 summary

@@ -49,11 +49,12 @@ whisper_anywhere/
 
 ## opencode plugin
 
-An opencode plugin lives at `.opencode/plugins/whisper-anywhere.ts`. Install it globally so it works in any project:
+An opencode plugin lives at a [separate repo](https://github.com/misiekhardcore/whisper-anywhere-opencode). Install it globally so it works in any project:
 
 ```bash
+git clone https://github.com/misiekhardcore/whisper-anywhere-opencode
 mkdir -p ~/.config/opencode/plugins
-cp .opencode/plugins/whisper-anywhere.ts ~/.config/opencode/plugins/
+cp whisper-anywhere-opencode/whisper-anywhere.ts ~/.config/opencode/plugins/
 ```
 
 The plugin:
@@ -62,6 +63,8 @@ The plugin:
 - Injects text into TUI via `client.tui.appendPrompt()`
 - Registers `/voice` toggle command
 - Falls back to ydotool when the plugin is not connected (via `--stdout` flag logic)
+
+The plugin is auto-discovered by opencode when placed in `~/.config/opencode/plugins/`.
 
 The plugin is auto-discovered by opencode when placed in `.opencode/plugins/`.
 
