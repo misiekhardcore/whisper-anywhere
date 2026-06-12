@@ -43,7 +43,11 @@ Single-script Linux voice dictation daemon. Hold a hotkey, speak, release — te
 - `find_keyboard()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
 - `check_deps()` — verifies `parec`, `ydotool` are on PATH and `evdev`/`faster_whisper` import works
 - `load_model()` — initializes faster-whisper `WhisperModel` (auto-downloads from HuggingFace on first use)
-- `run_daemon()` — async evdev read loop; holds `parec` subprocess while hotkey pressed, runs `model.transcribe()` on release, types via `ydotool`
+- `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
+- `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
+- `transcribe()` — sends SIGINT to `parec`, drains remaining audio via `read_audio`, writes WAV, runs model, types with `ydotool`
+- `run_daemon()` — async evdev read loop; spawns `parec --raw` as an `asyncio.subprocess` on hotkey press, pipes audio through `read_audio` into a `bytearray` buffer, calls `transcribe()` on release
+- Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample without artificial timeouts
 - Two hotkey modes: combo (Ctrl+Super+Space, all three must be held) or single-key (any `KEY_*` from `linux/input-event-codes.h`)
 - Hotkey priority: CLI `--hotkey` > config file `hotkey=` > default combo
 - Model priority: CLI `--model` > config file `model=` > `distil-large-v3`

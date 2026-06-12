@@ -17,6 +17,7 @@ Config file at ~/.config/whisper-anywhere/config:
 import asyncio
 import subprocess
 import signal
+import struct
 import os
 import sys
 import argparse
@@ -112,9 +113,39 @@ def keys_held(held):
     return bool(held & CTRL) and bool(held & SUPER) and bool(held & SPACE)
 
 
-async def transcribe(proc, model):
+def write_wav(path, data, sample_rate=16000, sample_width=2, channels=1):
+    data_size = len(data)
+    with open(path, "wb") as f:
+        f.write(b"RIFF")
+        f.write(struct.pack("<I", 36 + data_size))
+        f.write(b"WAVE")
+        f.write(b"fmt ")
+        f.write(struct.pack("<I", 16))
+        f.write(struct.pack("<H", 1))
+        f.write(struct.pack("<H", channels))
+        f.write(struct.pack("<I", sample_rate))
+        f.write(struct.pack("<I", sample_rate * channels * sample_width))
+        f.write(struct.pack("<H", channels * sample_width))
+        f.write(struct.pack("<H", sample_width * 8))
+        f.write(b"data")
+        f.write(struct.pack("<I", data_size))
+        f.write(bytes(data))
+
+
+async def read_audio(proc, buffer):
+    while True:
+        chunk = await proc.stdout.read(4096)
+        if not chunk:
+            break
+        buffer.extend(chunk)
+
+
+async def transcribe(proc, read_task, buffer, model):
     proc.send_signal(signal.SIGINT)
-    await asyncio.get_event_loop().run_in_executor(None, proc.wait)
+    await read_task
+    await proc.wait()
+
+    write_wav(AUDIO, buffer)
 
     def _run():
         segments, _ = model.transcribe(AUDIO, beam_size=5)
@@ -129,6 +160,8 @@ async def run_daemon(hotkey_code, model):
     dev = find_keyboard()
     held = set()
     proc = None
+    read_task = None
+    buffer = None
 
     async for event in dev.async_read_loop():
         if event.type != ecodes.EV_KEY:
@@ -140,28 +173,38 @@ async def run_daemon(hotkey_code, model):
             if event.value == 1:
                 held.add(event.code)
                 if keys_held(held) and proc is None:
-                    proc = subprocess.Popen(
-                        ["parec", "--format=s16le", "--rate=16000",
-                         "--channels=1", "--file-format=wav", AUDIO],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    buffer = bytearray()
+                    proc = await asyncio.create_subprocess_exec(
+                        "parec", "--format=s16le", "--rate=16000",
+                        "--channels=1", "--raw",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.DEVNULL,
                     )
+                    read_task = asyncio.create_task(read_audio(proc, buffer))
             elif event.value == 0:
                 held.discard(event.code)
                 if proc is not None:
-                    await transcribe(proc, model)
+                    await transcribe(proc, read_task, buffer, model)
                     proc = None
+                    read_task = None
+                    buffer = None
         else:
             if event.code != hotkey_code:
                 continue
             if event.value == 1 and proc is None:
-                proc = subprocess.Popen(
-                    ["parec", "--format=s16le", "--rate=16000",
-                     "--channels=1", "--file-format=wav", AUDIO],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                buffer = bytearray()
+                proc = await asyncio.create_subprocess_exec(
+                    "parec", "--format=s16le", "--rate=16000",
+                    "--channels=1", "--raw",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
                 )
+                read_task = asyncio.create_task(read_audio(proc, buffer))
             elif event.value == 0 and proc is not None:
-                await transcribe(proc, model)
+                await transcribe(proc, read_task, buffer, model)
                 proc = None
+                read_task = None
+                buffer = None
 
 
 def main():
