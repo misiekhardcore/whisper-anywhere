@@ -11,10 +11,13 @@ install:
 		|| pip3 install --user --break-system-packages -e .
 
 install-deps:
-	$(PYTHON) -m pip install --user pytest pytest-asyncio 2>/dev/null \
-		|| $(PYTHON) -m pip install --user --break-system-packages pytest pytest-asyncio
+	$(PYTHON) -m pip install --user pytest pytest-asyncio build 2>/dev/null \
+		|| $(PYTHON) -m pip install --user --break-system-packages pytest pytest-asyncio build
 
-build:
+build: install-deps
+	$(PYTHON) -m build
+
+build: install-deps
 	$(PYTHON) -m build
 
 clean:
