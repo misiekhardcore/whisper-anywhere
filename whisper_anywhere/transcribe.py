@@ -1,7 +1,7 @@
 import sys
 from faster_whisper import WhisperModel
 
-DEFAULT_MODEL = "distil-large-v3"
+DEFAULT_MODEL = "distil-medium.en"
 
 
 def load_model(model_id):

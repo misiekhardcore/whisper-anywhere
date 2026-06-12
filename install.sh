@@ -6,7 +6,7 @@ BIN_DIR="$HOME/.local/bin"
 BIN_TARGET="$BIN_DIR/whisper-anywhere"
 CONFIG_DIR="$HOME/.config/whisper-anywhere"
 AUTOSTART_DIR="$HOME/.config/autostart"
-MODEL="${MODEL:-distil-large-v3}"
+MODEL="${MODEL:-distil-medium.en}"
 HOTKEY="${HOTKEY:-}"
 PYTHON="${PYTHON:-$(which python3)}"
 
@@ -149,8 +149,8 @@ step_config() {
 # hotkey=KEY_GRAVE
 #
 # Uncomment to use a different model:
-# model=distil-large-v3
 # model=distil-medium.en
+# model=distil-small.en
 # model=distil-small.en
 EOF
         if [ -n "$HOTKEY" ]; then

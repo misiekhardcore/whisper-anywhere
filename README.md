@@ -64,7 +64,7 @@ hotkey=KEY_F12
 # hotkey=
 
 # Model size
-model=distil-large-v3
+model=distil-medium.en
 ```
 
 ### Command-line options
@@ -73,6 +73,7 @@ model=distil-large-v3
 whisper-anywhere --hotkey KEY_F12     # single-key mode
 whisper-anywhere --hotkey KEY_GRAVE   # use backtick key
 whisper-anywhere --model distil-small.en
+whisper-anywhere --stdout             # JSON lines for opencode plugin
 ```
 
 ## Models
@@ -81,8 +82,8 @@ Downloaded automatically from HuggingFace on first use (by [faster-whisper](http
 
 | Model | Size | Quality |
 |---|---|---|
-| `distil-large-v3` | 1.5 GB | Best (default) |
-| `distil-medium.en` | 300 MB | Better |
+| `distil-large-v3` | 1.5 GB | Best |
+| `distil-medium.en` | 300 MB | Better (default) |
 | `distil-small.en` | 94 MB | Good |
 
 Set via config or `--model`.
