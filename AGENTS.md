@@ -47,6 +47,17 @@ whisper_anywhere/
 - Models: `~/.local/share/whisper/models/`
 - Temp audio: `/tmp/whisper-anywhere.wav`
 
+## opencode plugin
+
+An opencode plugin lives at `.opencode/plugins/whisper-anywhere.ts`:
+- Spawns `whisper-anywhere --stdout` as a child process
+- Reads JSON lines from stdout: `{"text": "..."}`
+- Injects text into TUI via `client.tui.appendPrompt()`
+- Registers `/voice` toggle command
+- Falls back to ydotool when the plugin is not connected (via `--stdout` flag logic)
+
+The plugin is auto-discovered by opencode when placed in `.opencode/plugins/`.
+
 ## Script architecture
 
 - `find_keyboard()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
@@ -54,10 +65,10 @@ whisper_anywhere/
 - `load_model()` — initializes faster-whisper `WhisperModel` (auto-downloads from HuggingFace on first use)
 - `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
 - `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
-- `transcribe()` — sends SIGINT to `parec`, drains remaining audio via `read_audio`, writes WAV, runs model, types with `ydotool`
+- `transcribe()` — sends SIGINT to `parec`, drains remaining audio via `read_audio`, writes WAV, runs model. Returns text; caller decides output (ydotool or stdout JSON).
 - `run_daemon()` — async evdev read loop; spawns `parec --raw` as an `asyncio.subprocess` on hotkey press, pipes audio through `read_audio` into a `bytearray` buffer, calls `transcribe()` on release
 - Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample
 - `parec` is started with `--latency-msec=30` to shrink PulseAudio's internal capture buffer from ~250ms to 30ms, so the tail loss on SIGINT is imperceptible
 - Two hotkey modes: combo (Ctrl+Super+Space, all three must be held) or single-key (any `KEY_*` from `linux/input-event-codes.h`)
 - Hotkey priority: CLI `--hotkey` > config file `hotkey=` > default combo
-- Model priority: CLI `--model` > config file `model=` > `distil-large-v3`
+- Model priority: CLI `--model` > config file `model=` > `distil-medium.en`

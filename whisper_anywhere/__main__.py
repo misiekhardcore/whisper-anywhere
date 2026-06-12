@@ -1,4 +1,5 @@
 import asyncio
+import json
 import signal
 import subprocess
 import sys
@@ -23,11 +24,10 @@ async def transcribe(proc, read_task, buffer, model):
         return " ".join(segment.text.strip() for segment in segments)
 
     text = await asyncio.get_event_loop().run_in_executor(None, _run)
-    if text:
-        subprocess.run(["ydotool", "type", text])
+    return text
 
 
-async def run_daemon(hotkey_code, model):
+async def run_daemon(hotkey_code, model, stdout_mode=False):
     dev = find_keyboard()
     held = set()
     proc = None
@@ -55,7 +55,12 @@ async def run_daemon(hotkey_code, model):
             elif event.value == 0:
                 held.discard(event.code)
                 if proc is not None:
-                    await transcribe(proc, read_task, buffer, model)
+                    text = await transcribe(proc, read_task, buffer, model)
+                    if text:
+                        if stdout_mode:
+                            print(json.dumps({"text": text}), flush=True)
+                        else:
+                            subprocess.run(["ydotool", "type", text])
                     proc = None
                     read_task = None
                     buffer = None
@@ -72,7 +77,12 @@ async def run_daemon(hotkey_code, model):
                 )
                 read_task = asyncio.create_task(read_audio(proc, buffer))
             elif event.value == 0 and proc is not None:
-                await transcribe(proc, read_task, buffer, model)
+                text = await transcribe(proc, read_task, buffer, model)
+                if text:
+                    if stdout_mode:
+                        print(json.dumps({"text": text}), flush=True)
+                    else:
+                        subprocess.run(["ydotool", "type", text])
                 proc = None
                 read_task = None
                 buffer = None
@@ -84,6 +94,7 @@ def main():
 
     args = parse_args()
     cfg = load_config()
+    stdout_mode = args.stdout or cfg.get("stdout") in ("1", "true", "yes")
 
     hotkey_arg = args.hotkey or cfg.get("hotkey")
     hotkey_code = None
@@ -101,7 +112,7 @@ def main():
     model = load_model(model_id)
 
     print(f"whisper-anywhere ready — mode: {mode_str}", file=sys.stderr)
-    asyncio.run(run_daemon(hotkey_code, model))
+    asyncio.run(run_daemon(hotkey_code, model, stdout_mode))
 
 
 if __name__ == "__main__":

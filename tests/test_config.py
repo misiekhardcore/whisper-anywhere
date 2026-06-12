@@ -91,6 +91,11 @@ class TestParseArgs:
             assert args.hotkey == "KEY_GRAVE"
             assert args.model == "small"
 
+    def test_stdout_flag(self):
+        with patch.object(sys, "argv", ["whisper-anywhere", "--stdout"]):
+            args = parse_args()
+            assert args.stdout is True
+
 
 def test_config_dir_constant():
     assert CONFIG_DIR == os.path.expanduser("~/.config/whisper-anywhere")
