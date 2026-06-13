@@ -98,7 +98,7 @@ async def _start_recording():
         "--raw",
         f"--latency-msec={PAREC_LATENCY_MS}",
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
+        stderr=sys.stderr,
     )
     read_task = asyncio.create_task(read_audio(proc, buffer))
     return proc, read_task, buffer
