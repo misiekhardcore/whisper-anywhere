@@ -8,12 +8,20 @@ import sys
 
 from evdev import ecodes
 
-from .audio import write_wav, read_audio, AUDIO
-from .config import check_deps, load_config, parse_args, handler
+from .audio import (
+    write_wav, read_audio, stop_recording,
+    AUDIO, SAMPLE_RATE, CHANNELS, PAREC_FORMAT, PAREC_LATENCY_MS,
+)
+from .config import check_deps, load_config, parse_args, handler, runtime_dir
 from .keyboard import find_keyboard, keys_held, WANTED_MODS
 
-LOCK_PATH = "/tmp/whisper-anywhere.lock"
+LOCK_PATH = os.path.join(runtime_dir(), "lock")
 _lock_fd = None
+
+# How long to wait between keyboard re-scan attempts (device absent / hotplug).
+KEYBOARD_SCAN_DELAY_S = 2
+# How long to wait before re-scanning after a mid-session OSError (e.g. unplug).
+KEYBOARD_RECONNECT_DELAY_S = 1
 
 
 def acquire_lock():
@@ -43,7 +51,7 @@ def _remove_lock():
 
 
 async def transcribe(proc, read_task, buffer, model):
-    proc.send_signal(signal.SIGINT)
+    stop_recording(proc)
     await read_task
     await proc.wait()
 
@@ -60,65 +68,90 @@ async def transcribe(proc, read_task, buffer, model):
     return text
 
 
-async def run_daemon(hotkey_code, model, stdout_mode=False):
-    dev = find_keyboard()
-    held = set()
-    proc = None
-    read_task = None
-    buffer = None
+def emit(text, stdout_mode):
+    """Deliver transcribed text, surfacing ydotool failures instead of dropping them."""
+    if not text:
+        return
+    if stdout_mode:
+        print(json.dumps({"text": text}), flush=True)
+        return
+    try:
+        result = subprocess.run(["ydotool", "type", text])
+    except FileNotFoundError:
+        print("ydotool not found — is it installed and on PATH?", file=sys.stderr)
+        return
+    if result.returncode != 0:
+        print(
+            f"ydotool type failed (exit {result.returncode}) — "
+            "is ydotool.service running? (systemctl --user status ydotool)",
+            file=sys.stderr,
+        )
 
-    async for event in dev.async_read_loop():
-        if event.type != ecodes.EV_KEY:
+
+async def _start_recording():
+    buffer = bytearray()
+    proc = await asyncio.create_subprocess_exec(
+        "parec",
+        f"--format={PAREC_FORMAT}",
+        f"--rate={SAMPLE_RATE}",
+        f"--channels={CHANNELS}",
+        "--raw",
+        f"--latency-msec={PAREC_LATENCY_MS}",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    read_task = asyncio.create_task(read_audio(proc, buffer))
+    return proc, read_task, buffer
+
+
+async def run_daemon(hotkey_code, model, stdout_mode=False):
+    # Outer loop re-acquires the keyboard whenever the device disappears so the
+    # daemon survives unplug/replug without user intervention.  The loop is
+    # intentionally unbounded: a hotkey daemon should always recover.
+    while True:
+        try:
+            dev = find_keyboard()
+        except RuntimeError as exc:
+            print(f"{exc} — retrying in {KEYBOARD_SCAN_DELAY_S}s", file=sys.stderr)
+            await asyncio.sleep(KEYBOARD_SCAN_DELAY_S)
             continue
 
-        if hotkey_code is None:
-            if event.code not in WANTED_MODS:
-                continue
-            if event.value == 1:
-                held.add(event.code)
-                if keys_held(held) and proc is None:
-                    buffer = bytearray()
-                    proc = await asyncio.create_subprocess_exec(
-                        "parec", "--format=s16le", "--rate=16000",
-                        "--channels=1", "--raw", "--latency-msec=30",
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.DEVNULL,
-                    )
-                    read_task = asyncio.create_task(read_audio(proc, buffer))
-            elif event.value == 0:
-                held.discard(event.code)
-                if proc is not None:
-                    text = await transcribe(proc, read_task, buffer, model)
-                    if text:
-                        if stdout_mode:
-                            print(json.dumps({"text": text}), flush=True)
-                        else:
-                            subprocess.run(["ydotool", "type", text])
-                    proc = None
-                    read_task = None
-                    buffer = None
-        else:
-            if event.code != hotkey_code:
-                continue
-            if event.value == 1 and proc is None:
-                buffer = bytearray()
-                proc = await asyncio.create_subprocess_exec(
-                    "parec", "--format=s16le", "--rate=16000",
-                    "--channels=1", "--raw", "--latency-msec=30",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                read_task = asyncio.create_task(read_audio(proc, buffer))
-            elif event.value == 0 and proc is not None:
-                text = await transcribe(proc, read_task, buffer, model)
-                if text:
-                    if stdout_mode:
-                        print(json.dumps({"text": text}), flush=True)
-                    else:
-                        subprocess.run(["ydotool", "type", text])
-                proc = None
-                read_task = None
-                buffer = None
+        held = set()
+        proc = None
+        read_task = None
+        buffer = None
+        try:
+            async for event in dev.async_read_loop():
+                if event.type != ecodes.EV_KEY:
+                    continue
+
+                if hotkey_code is None:
+                    if event.code not in WANTED_MODS:
+                        continue
+                    if event.value == 1:
+                        held.add(event.code)
+                        if keys_held(held) and proc is None:
+                            proc, read_task, buffer = await _start_recording()
+                    elif event.value == 0:
+                        held.discard(event.code)
+                        if proc is not None:
+                            text = await transcribe(proc, read_task, buffer, model)
+                            emit(text, stdout_mode)
+                            proc = read_task = buffer = None
+                else:
+                    if event.code != hotkey_code:
+                        continue
+                    if event.value == 1 and proc is None:
+                        proc, read_task, buffer = await _start_recording()
+                    elif event.value == 0 and proc is not None:
+                        text = await transcribe(proc, read_task, buffer, model)
+                        emit(text, stdout_mode)
+                        proc = read_task = buffer = None
+        except OSError as exc:
+            print(f"keyboard input error ({exc}); re-scanning devices", file=sys.stderr)
+            if proc is not None:
+                stop_recording(proc)
+            await asyncio.sleep(KEYBOARD_RECONNECT_DELAY_S)
 
 
 def main():

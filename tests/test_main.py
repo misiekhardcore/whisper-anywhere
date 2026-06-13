@@ -1,9 +1,10 @@
+import json
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from whisper_anywhere.__main__ import acquire_lock, _remove_lock, LOCK_PATH
+from whisper_anywhere.__main__ import acquire_lock, _remove_lock, emit, LOCK_PATH
 
 
 class TestSingleInstance:
@@ -55,3 +56,32 @@ class TestSingleInstance:
     def test_idempotent_release(self):
         _remove_lock()
         _remove_lock()
+
+
+class TestEmit:
+    def test_empty_text_is_noop(self):
+        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+            emit("", False)
+            run.assert_not_called()
+
+    def test_stdout_mode_writes_json(self, capsys):
+        emit("hello world", True)
+        out = capsys.readouterr().out
+        assert json.loads(out) == {"text": "hello world"}
+
+    def test_ydotool_invoked(self):
+        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            emit("hello", False)
+            run.assert_called_once_with(["ydotool", "type", "hello"])
+
+    def test_ydotool_failure_warns(self, capsys):
+        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=1)
+            emit("hello", False)
+            assert "ydotool type failed" in capsys.readouterr().err
+
+    def test_ydotool_missing_warns(self, capsys):
+        with patch("whisper_anywhere.__main__.subprocess.run", side_effect=FileNotFoundError):
+            emit("hello", False)
+            assert "ydotool not found" in capsys.readouterr().err
