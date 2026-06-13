@@ -1,10 +1,13 @@
-.PHONY: test install install-deps clean build
+.PHONY: test test-e2e install install-deps clean build
 
 PYTHON ?= $(shell which python3)
 PYTEST ?= PYTHONPATH="/usr/lib/python3/dist-packages:$$PYTHONPATH" $(PYTHON) -m pytest
 
 test:
 	$(PYTEST) -v tests/
+
+test-e2e:
+	WHISPER_E2E=1 $(PYTEST) -m integration -v tests/
 
 install:
 	$(PYTHON) -m pip install --user -e . 2>/dev/null \

@@ -41,3 +41,21 @@ jobs:
 
       - name: Build package
         run: make build
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      WHISPER_E2E: "1"
+      WHISPER_E2E_INSTALL: "1"
+      MODEL: "tiny.en"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test runner deps
+        run: pip install pytest pytest-asyncio evdev
+
+      - name: Run e2e (install.sh -> tests -> uninstall.sh)
+        run: make test-e2e

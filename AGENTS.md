@@ -25,7 +25,7 @@ whisper_anywhere/
 ├── __main__.py      # entry point: main(), run_daemon(), transcribe()
 ├── audio.py         # write_wav(), read_audio(), stop_recording(), runtime paths
 ├── config.py        # check_deps(), load_config(), parse_args(), runtime_dir()
-├── keyboard.py      # find_keyboard(), keys_held()
+├── keyboard.py      # find_keyboards(), keys_held()
 └── transcribe.py    # load_model()
 ```
 
@@ -53,7 +53,7 @@ whisper_anywhere/
 
 ## Script architecture
 
-- `find_keyboard()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
+- `find_keyboards()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
 - `check_deps()` — verifies `parec`, `ydotool` are on PATH and `evdev`/`faster_whisper` import works
 - `load_model()` — initializes faster-whisper `WhisperModel` (auto-downloads from HuggingFace on first use)
 - `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
