@@ -9,8 +9,14 @@ import sys
 from evdev import ecodes
 
 from .audio import (
-    write_wav, read_audio, stop_recording,
-    AUDIO, SAMPLE_RATE, CHANNELS, PAREC_FORMAT, PAREC_LATENCY_MS,
+    write_wav,
+    read_audio,
+    stop_recording,
+    AUDIO,
+    SAMPLE_RATE,
+    CHANNELS,
+    PAREC_FORMAT,
+    PAREC_LATENCY_MS,
 )
 from .config import check_deps, load_config, parse_args, handler, runtime_dir
 from .keyboard import find_keyboards, keys_held, WANTED_MODS
@@ -65,8 +71,7 @@ async def transcribe(proc, read_task, buffer, model, language=None):
     write_wav(AUDIO, buffer)
 
     def _run():
-        segments, _ = model.transcribe(AUDIO, beam_size=5, language=language)
-        return " ".join(segment.text.strip() for segment in segments)
+        return model.transcribe(AUDIO, language=language)
 
     text = await asyncio.get_event_loop().run_in_executor(None, _run)
     return text
@@ -175,7 +180,9 @@ async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
                     elif event.value == 0:
                         held.discard(event.code)
                         if proc is not None:
-                            text = await transcribe(proc, read_task, buffer, model, language)
+                            text = await transcribe(
+                                proc, read_task, buffer, model, language
+                            )
                             emit(text, stdout_mode)
                             proc = read_task = buffer = None
                 else:
@@ -184,7 +191,9 @@ async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
                     if event.value == 1 and proc is None:
                         proc, read_task, buffer = await _start_recording()
                     elif event.value == 0 and proc is not None:
-                        text = await transcribe(proc, read_task, buffer, model, language)
+                        text = await transcribe(
+                            proc, read_task, buffer, model, language
+                        )
                         emit(text, stdout_mode)
                         proc = read_task = buffer = None
         finally:
@@ -217,16 +226,20 @@ def main():
     else:
         mode_str = "combo (Ctrl+Super+Space)"
 
-    from .transcribe import load_model, DEFAULT_MODEL
+    from .transcribe import load_model, DEFAULT_MODEL, DEFAULT_ENGINE
 
-    check_deps()
+    engine = args.engine or cfg.get("engine", DEFAULT_ENGINE)
+    check_deps(engine)
     model_id = args.model or cfg.get("model", DEFAULT_MODEL)
-    model = load_model(model_id)
+    model = load_model(model_id, engine=engine)
 
     language = args.language or cfg.get("language") or None
     lang_str = language or "auto-detect"
 
-    print(f"whisper-anywhere ready — mode: {mode_str}, language: {lang_str}", file=sys.stderr)
+    print(
+        f"whisper-anywhere ready — mode: {mode_str}, language: {lang_str}",
+        file=sys.stderr,
+    )
     asyncio.run(run_daemon(hotkey_code, model, stdout_mode, language))
 
 

@@ -84,9 +84,17 @@ class TestParseArgs:
             assert args.model == "tiny.en"
 
     def test_both_args(self):
-        with patch.object(sys, "argv", [
-            "whisper-anywhere", "--hotkey", "KEY_GRAVE", "--model", "small",
-        ]):
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "whisper-anywhere",
+                "--hotkey",
+                "KEY_GRAVE",
+                "--model",
+                "small",
+            ],
+        ):
             args = parse_args()
             assert args.hotkey == "KEY_GRAVE"
             assert args.model == "small"
@@ -103,6 +111,14 @@ class TestParseArgs:
     def test_custom_language(self):
         with patch.object(sys, "argv", ["whisper-anywhere", "--language", "pl"]):
             assert parse_args().language == "pl"
+
+    def test_engine_default_none(self):
+        with patch.object(sys, "argv", ["whisper-anywhere"]):
+            assert parse_args().engine is None
+
+    def test_custom_engine(self):
+        with patch.object(sys, "argv", ["whisper-anywhere", "--engine", "sensevoice"]):
+            assert parse_args().engine == "sensevoice"
 
 
 def test_config_dir_constant():

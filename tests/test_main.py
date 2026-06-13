@@ -92,7 +92,9 @@ class TestEmit:
             assert "ydotool type failed" in capsys.readouterr().err
 
     def test_ydotool_missing_warns(self, capsys):
-        with patch("whisper_anywhere.__main__.subprocess.run", side_effect=FileNotFoundError):
+        with patch(
+            "whisper_anywhere.__main__.subprocess.run", side_effect=FileNotFoundError
+        ):
             emit("hello", False)
             assert "ydotool not found" in capsys.readouterr().err
 
@@ -123,12 +125,14 @@ class TestRunDaemonMultiKeyboard:
         # Regression: with multiple keyboards connected the hotkey must work on
         # whichever one the user presses it on, not only the first device.
         idle_keyboard = _FakeDevice([])
-        used_keyboard = _FakeDevice([
-            _key_event(ecodes.KEY_LEFTCTRL, 1),
-            _key_event(ecodes.KEY_LEFTMETA, 1),
-            _key_event(ecodes.KEY_SPACE, 1),
-            _key_event(ecodes.KEY_SPACE, 0),
-        ])
+        used_keyboard = _FakeDevice(
+            [
+                _key_event(ecodes.KEY_LEFTCTRL, 1),
+                _key_event(ecodes.KEY_LEFTMETA, 1),
+                _key_event(ecodes.KEY_SPACE, 1),
+                _key_event(ecodes.KEY_SPACE, 0),
+            ]
+        )
         starts = 0
         emitted = []
 
@@ -149,12 +153,17 @@ class TestRunDaemonMultiKeyboard:
             except asyncio.CancelledError:
                 pass
 
-        with patch.object(main_module, "find_keyboards",
-                          return_value=[idle_keyboard, used_keyboard]), \
-             patch.object(main_module, "_start_recording", fake_start), \
-             patch.object(main_module, "transcribe", fake_transcribe), \
-             patch.object(main_module, "emit", lambda text, mode: emitted.append(text)), \
-             patch.object(main_module, "stop_recording", lambda proc: None):
+        with (
+            patch.object(
+                main_module,
+                "find_keyboards",
+                return_value=[idle_keyboard, used_keyboard],
+            ),
+            patch.object(main_module, "_start_recording", fake_start),
+            patch.object(main_module, "transcribe", fake_transcribe),
+            patch.object(main_module, "emit", lambda text, mode: emitted.append(text)),
+            patch.object(main_module, "stop_recording", lambda proc: None),
+        ):
             asyncio.run(scenario())
 
         assert starts == 1

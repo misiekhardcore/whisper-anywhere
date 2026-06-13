@@ -18,6 +18,7 @@ import asyncio
 import json
 import os
 import re
+import sys
 import types
 import wave
 from difflib import SequenceMatcher
@@ -125,8 +126,8 @@ class StubModel:
     def __init__(self, text):
         self._text = text
 
-    def transcribe(self, path, beam_size=5, language=None):
-        return [types.SimpleNamespace(text=self._text)], None
+    def transcribe(self, path, language=None):
+        return self._text
 
 
 @pytest.mark.asyncio
@@ -157,12 +158,16 @@ def test_install_artifacts(installed_app):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_real_e2e(installed_app, monkeypatch):
+async def test_real_e2e(monkeypatch):
     if not os.environ.get("WHISPER_E2E"):
         pytest.skip("set WHISPER_E2E=1 to run the real-model e2e")
 
+    # test_transcribe.py may have injected a mock for faster_whisper into
+    # sys.modules at collection time (if it wasn't installed yet). Pop it so
+    # the real module (which install.sh may have installed since) is found.
+    sys.modules.pop("faster_whisper", None)
     pytest.importorskip("faster_whisper")
-    from faster_whisper import WhisperModel
+    from whisper_anywhere.transcribe import FasterWhisperTranscriber
 
     clips = sorted(FIXTURES.glob("*.wav"))
     if not clips:
@@ -171,11 +176,13 @@ async def test_real_e2e(installed_app, monkeypatch):
     expected = (FIXTURES / "transcript.txt").read_text().strip()
 
     try:
-        model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+        model = FasterWhisperTranscriber("tiny.en")
     except Exception as exc:  # offline / download failure
         pytest.skip(f"tiny.en model unavailable: {exc}")
 
-    text = await drive_dictation(model, pcm_from_wav(clips[0]), monkeypatch, timeout=120)
+    text = await drive_dictation(
+        model, pcm_from_wav(clips[0]), monkeypatch, timeout=120
+    )
 
     norm_expected, norm_actual = _normalize(expected), _normalize(text)
     ratio = SequenceMatcher(None, norm_expected, norm_actual).ratio()

@@ -3,6 +3,8 @@ import os
 import subprocess
 import sys
 
+from whisper_anywhere.transcribe import DEFAULT_ENGINE
+
 CONFIG_DIR = os.path.expanduser("~/.config/whisper-anywhere")
 
 
@@ -18,7 +20,7 @@ def runtime_dir():
     return path
 
 
-def check_deps():
+def check_deps(engine=DEFAULT_ENGINE):
     missing = []
     for cmd in ("parec", "ydotool"):
         if not subprocess.run(["which", cmd], capture_output=True).returncode == 0:
@@ -31,13 +33,26 @@ def check_deps():
     try:
         from evdev import InputDevice
     except ImportError:
-        print("Missing python3-evdev. Run: pkexec apt install python3-evdev", file=sys.stderr)
+        print(
+            "Missing python3-evdev. Run: pkexec apt install python3-evdev",
+            file=sys.stderr,
+        )
         sys.exit(1)
-    try:
-        from faster_whisper import WhisperModel
-    except ImportError:
-        print("Missing faster-whisper. Run: pip3 install --user faster-whisper", file=sys.stderr)
-        sys.exit(1)
+    if engine == "faster-whisper":
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            print(
+                "Missing faster-whisper. Run: pip3 install --user faster-whisper",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    elif engine == "sensevoice":
+        try:
+            import funasr  # noqa: F401
+        except ImportError:
+            print("Missing funasr. Run: pip3 install --user funasr", file=sys.stderr)
+            sys.exit(1)
 
 
 def load_config(path=None):
@@ -58,14 +73,30 @@ def load_config(path=None):
 
 def parse_args():
     p = argparse.ArgumentParser(description="whisper-anywhere voice dictation daemon")
-    p.add_argument("--hotkey", default=None,
-                    help="Single key like KEY_F12. Omit for Ctrl+Super+Space combo.")
-    p.add_argument("--model", default=None,
-                    help="Model name (default: distil-medium.en)")
-    p.add_argument("--language", default=None,
-                    help="Force a language code like en, pl, de. Omit to auto-detect.")
-    p.add_argument("--stdout", action="store_true",
-                    help="Write transcribed text as JSON lines to stdout instead of ydotool")
+    p.add_argument(
+        "--hotkey",
+        default=None,
+        help="Single key like KEY_F12. Omit for Ctrl+Super+Space combo.",
+    )
+    p.add_argument(
+        "--model", default=None, help="Model name (default: distil-medium.en)"
+    )
+    p.add_argument(
+        "--language",
+        default=None,
+        help="Force a language code like en, pl, de. Omit to auto-detect.",
+    )
+    p.add_argument(
+        "--engine",
+        default=None,
+        choices=("faster-whisper", "sensevoice"),
+        help="Transcription engine (default: faster-whisper)",
+    )
+    p.add_argument(
+        "--stdout",
+        action="store_true",
+        help="Write transcribed text as JSON lines to stdout instead of ydotool",
+    )
     return p.parse_args()
 
 
