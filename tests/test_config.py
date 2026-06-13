@@ -96,6 +96,14 @@ class TestParseArgs:
             args = parse_args()
             assert args.stdout is True
 
+    def test_language_default_none(self):
+        with patch.object(sys, "argv", ["whisper-anywhere"]):
+            assert parse_args().language is None
+
+    def test_custom_language(self):
+        with patch.object(sys, "argv", ["whisper-anywhere", "--language", "pl"]):
+            assert parse_args().language == "pl"
+
 
 def test_config_dir_constant():
     assert CONFIG_DIR == os.path.expanduser("~/.config/whisper-anywhere")
