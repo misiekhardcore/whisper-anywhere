@@ -17,7 +17,11 @@ class FasterWhisperTranscriber:
         self._model = WhisperModel(model_id, device="cpu", compute_type="int8")
 
     def transcribe(self, audio_path, language=None):
-        segments, _ = self._model.transcribe(audio_path, beam_size=5, language=language)
+        result = self._model.transcribe(audio_path, beam_size=5, language=language)
+        if isinstance(result, tuple):
+            segments = result[0]
+        else:
+            segments = result
         return " ".join(segment.text.strip() for segment in segments)
 
 

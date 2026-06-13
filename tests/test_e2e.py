@@ -106,13 +106,6 @@ async def drive_dictation(model, pcm, monkeypatch, timeout=30):
     task = asyncio.create_task(m.run_daemon(ecodes.KEY_F12, model, stdout_mode=True))
     try:
         return await asyncio.wait_for(done, timeout)
-    except asyncio.TimeoutError:
-        if task.done() and not task.cancelled():
-            exc = task.exception()
-            if exc is not None:
-                import traceback
-                traceback.print_exception(type(exc), exc, exc.__traceback__)
-        raise
     finally:
         task.cancel()
         try:
