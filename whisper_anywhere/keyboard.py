@@ -7,7 +7,7 @@ WANTED_MODS = CTRL | SUPER | SPACE
 
 
 def find_keyboard():
-    skip = {"ydotoold", "lid", "power", "sleep", "video"}
+    skip = {"ydotool", "lid", "power", "sleep", "video"}
     for path in list_devices():
         dev = InputDevice(path)
         name = dev.name.lower()
