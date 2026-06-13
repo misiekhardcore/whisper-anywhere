@@ -6,7 +6,7 @@ Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, rel
 
 ## Tests and CI
 
-- 39 unit tests across `audio.py`, `config.py`, and `keyboard.py`. Run with `make test`.
+- Unit tests across `audio.py`, `config.py`, `keyboard.py`, and `__main__.py`. Run with `make test`.
 - CI runs on push/PR via `.github/workflows/ci.yml` — two jobs: `test` (pytest) and `build` (sdist + wheel).
 - The project uses `setuptools` via `pyproject.toml` with a `console_scripts` entry point. Install with `python3 -m pip install --user -e .`.
 
@@ -23,8 +23,8 @@ The daemon is a Python package `whisper_anywhere/` installed via `pip install -e
 whisper_anywhere/
 ├── __init__.py
 ├── __main__.py      # entry point: main(), run_daemon(), transcribe()
-├── audio.py         # write_wav(), read_audio()
-├── config.py        # check_deps(), load_config(), parse_args()
+├── audio.py         # write_wav(), read_audio(), stop_recording(), runtime paths
+├── config.py        # check_deps(), load_config(), parse_args(), runtime_dir()
 ├── keyboard.py      # find_keyboard(), keys_held()
 └── transcribe.py    # load_model()
 ```
@@ -40,12 +40,16 @@ whisper_anywhere/
 - User must be in the `input` group (`sudo usermod -a -G input $USER`) for evdev keyboard access.
 - `ydotool` systemd user service must be running (`systemctl --user start ydotool.service`).
 - PulseAudio or PipeWire must be running for `parec`.
+- The daemon itself runs as `systemd --user` service `whisper-anywhere.service` (installed by
+  `install.sh`); logs go to journald (`journalctl --user -u whisper-anywhere`). It reads hotkey,
+  model, and language from the config file, so the unit never needs regenerating on config edits.
 
 ## Config and data locations
 
 - Config: `~/.config/whisper-anywhere/config` (simple `key=value` format, comments with `#`)
-- Models: `~/.local/share/whisper/models/`
-- Temp audio: `/tmp/whisper-anywhere.wav`
+- Models: HuggingFace cache, `~/.cache/huggingface/hub/` (managed by faster-whisper)
+- Lock + temp audio: `$XDG_RUNTIME_DIR/whisper-anywhere/` (0700), falling back to
+  `~/.cache/whisper-anywhere/` — see `config.runtime_dir()`
 
 ## Script architecture
 
@@ -54,10 +58,13 @@ whisper_anywhere/
 - `load_model()` — initializes faster-whisper `WhisperModel` (auto-downloads from HuggingFace on first use)
 - `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
 - `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
-- `transcribe()` — sends SIGINT to `parec`, drains remaining audio via `read_audio`, writes WAV, runs model. Returns text; caller decides output (ydotool or stdout JSON).
-- `run_daemon()` — async evdev read loop; spawns `parec --raw` as an `asyncio.subprocess` on hotkey press, pipes audio through `read_audio` into a `bytearray` buffer, calls `transcribe()` on release
+- `transcribe()` — stops `parec` via `stop_recording()`, drains remaining audio via `read_audio`, writes WAV, runs model (with optional `language`). Returns text.
+- `emit()` — delivers text: `ydotool type` (checking the return code / `FileNotFoundError`) or stdout JSON in `--stdout` mode.
+- `run_daemon()` — async evdev read loop; spawns `parec --raw` as an `asyncio.subprocess` on hotkey press, pipes audio through `read_audio` into a `bytearray` buffer, calls `transcribe()` on release. Wrapped in a loop that re-acquires the keyboard on hotplug/`OSError`.
+- `read_audio()` caps a single recording at `MAX_RECORDING_SECONDS` (60s) so a stuck hotkey can't run `parec` forever.
 - Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample
 - `parec` is started with `--latency-msec=30` to shrink PulseAudio's internal capture buffer from ~250ms to 30ms, so the tail loss on SIGINT is imperceptible
 - Two hotkey modes: combo (Ctrl+Super+Space, all three must be held) or single-key (any `KEY_*` from `linux/input-event-codes.h`)
 - Hotkey priority: CLI `--hotkey` > config file `hotkey=` > default combo
 - Model priority: CLI `--model` > config file `model=` > `distil-medium.en`
+- Language priority: CLI `--language` > config file `language=` > auto-detect
