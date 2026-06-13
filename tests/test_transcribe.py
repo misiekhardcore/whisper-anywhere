@@ -95,6 +95,16 @@ class TestSenseVoiceTranscriber:
         result = t.transcribe("/tmp/t.wav")
         assert result == ""
 
+    @patch("funasr.AutoModel")
+    def test_strips_sensevoice_tags(self, mock_auto):
+        mock_auto.return_value.generate.return_value = [
+            {"text": "<|en|><|EMO_UNKNOWN|><|Speech|>this is a test recording"}
+        ]
+
+        t = SenseVoiceTranscriber("iic/SenseVoiceSmall")
+        result = t.transcribe("/tmp/t.wav")
+        assert result == "this is a test recording"
+
 
 class TestLoadModel:
     @patch("faster_whisper.WhisperModel")

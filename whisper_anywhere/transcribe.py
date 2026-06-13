@@ -1,7 +1,10 @@
+import re
 import sys
 
 FASTER_WHISPER_DEFAULT = "distil-medium.en"
 SENSEVOICE_DEFAULT = "iic/SenseVoiceSmall"
+
+_SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
 
 
 class FasterWhisperTranscriber:
@@ -29,8 +32,10 @@ class SenseVoiceTranscriber:
             kwargs["language"] = language
         result = self._model.generate(**kwargs)
         if isinstance(result, list) and len(result) > 0:
-            return result[0].get("text", "").strip()
-        return str(result).strip() if result else ""
+            text = result[0].get("text", "")
+        else:
+            text = str(result) if result else ""
+        return _SENSEVOICE_TAG_RE.sub("", text).strip()
 
 
 def load_model(model_id=None, engine="faster-whisper"):
