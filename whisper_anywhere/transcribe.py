@@ -17,13 +17,8 @@ class FasterWhisperTranscriber:
         self._model = WhisperModel(model_id, device="cpu", compute_type="int8")
 
     def transcribe(self, audio_path, language=None):
-        result = self._model.transcribe(audio_path, beam_size=5, language=language)
-        if isinstance(result, tuple):
-            segments = result[0]
-        else:
-            segments = result
+        segments, _ = self._model.transcribe(audio_path, beam_size=5, language=language)
         return " ".join(segment.text.strip() for segment in segments)
-
 
 class SenseVoiceTranscriber:
     def __init__(self, model_id):
@@ -44,7 +39,7 @@ class SenseVoiceTranscriber:
         return _SENSEVOICE_TAG_RE.sub("", text).strip()
 
 
-def load_model(model_id=None, engine="faster-whisper"):
+def load_model(model_id=DEFAULT_MODEL, engine=DEFAULT_ENGINE):
     if engine == "faster-whisper":
         if model_id is None:
             model_id = FASTER_WHISPER_DEFAULT

@@ -1,6 +1,6 @@
 import os
 import signal
-import struct
+import wave
 
 from .config import runtime_dir
 
@@ -29,25 +29,11 @@ def stop_recording(proc):
 
 
 def write_wav(path, data, sample_rate=SAMPLE_RATE, sample_width=SAMPLE_WIDTH, channels=CHANNELS):
-    data_size = len(data)
-    if data_size % sample_width != 0:
-        data_size -= data_size % sample_width
-        data = data[:data_size]
-    with open(path, "wb") as f:
-        f.write(b"RIFF")
-        f.write(struct.pack("<I", 36 + data_size))
-        f.write(b"WAVE")
-        f.write(b"fmt ")
-        f.write(struct.pack("<I", 16))
-        f.write(struct.pack("<H", 1))
-        f.write(struct.pack("<H", channels))
-        f.write(struct.pack("<I", sample_rate))
-        f.write(struct.pack("<I", sample_rate * channels * sample_width))
-        f.write(struct.pack("<H", channels * sample_width))
-        f.write(struct.pack("<H", sample_width * 8))
-        f.write(b"data")
-        f.write(struct.pack("<I", data_size))
-        f.write(bytes(data))
+    with wave.open(path, "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(sample_width)
+        w.setframerate(sample_rate)
+        w.writeframes(data)
 
 
 async def read_audio(proc, buffer):
