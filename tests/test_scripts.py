@@ -11,6 +11,7 @@ import os
 import subprocess
 import textwrap
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -56,7 +57,7 @@ def fake_home(tmp_path):
     return tmp_path
 
 
-def _run(script: Path, home: Path, stdin: str | None = None) -> subprocess.CompletedProcess:
+def _run(script: Path, home: Path, stdin: Optional[str] = None) -> subprocess.CompletedProcess:
     bin_dir = home / "bin"
     env = {
         **os.environ,
