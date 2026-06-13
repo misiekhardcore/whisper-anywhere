@@ -145,8 +145,19 @@ async def test_stub_e2e(monkeypatch, capsys):
 # Real e2e (gated)
 # --------------------------------------------------------------------------- #
 @pytest.mark.integration
+def test_install_artifacts(installed_app):
+    """install.sh (run by the installed_app fixture) created the expected
+    artifacts; uninstall.sh removal is asserted in the fixture teardown."""
+    if installed_app is None:
+        pytest.skip("set WHISPER_E2E_INSTALL=1 to exercise install.sh/uninstall.sh")
+    assert installed_app.bin.exists()
+    assert installed_app.unit.exists()
+    assert installed_app.config.exists()
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
-async def test_real_e2e(monkeypatch):
+async def test_real_e2e(installed_app, monkeypatch):
     if not os.environ.get("WHISPER_E2E"):
         pytest.skip("set WHISPER_E2E=1 to run the real-model e2e")
 
