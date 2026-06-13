@@ -113,6 +113,113 @@ async def _start_recording():
     return proc, read_task, buffer
 
 
+async def _live_vad_loop(
+    buffer, model, language, emit_fn, vad, stop_event, stdout_mode
+):
+    """Periodically run VAD on accumulated audio, transcribe complete segments.
+
+    Returns the byte offset up to which audio has been transcribed.
+    """
+    sample_width = 2
+    sample_rate = 16000
+    last_transcribed = 0
+    min_segment = int(0.5 * sample_rate * sample_width)
+    silence_threshold = int(0.5 * sample_rate * sample_width)
+    force_boundary = 15 * sample_rate * sample_width
+
+    while not stop_event.is_set():
+        try:
+            await asyncio.sleep(0.2)
+
+            untranscribed = len(buffer) - last_transcribed
+            if untranscribed < min_segment:
+                continue
+
+            chunk = bytes(buffer[last_transcribed:])
+            segments = vad.detect(chunk, sample_rate)
+
+            if not segments:
+                continue
+
+            for seg_start_sample, seg_end_sample in segments:
+                seg_start = seg_start_sample * sample_width
+                seg_end = seg_end_sample * sample_width
+                seg_duration = seg_end - seg_start
+                silence_after = untranscribed - seg_end
+
+                complete = (
+                    silence_after >= silence_threshold
+                    or seg_duration >= force_boundary
+                )
+
+                if complete and seg_duration >= min_segment:
+                    abs_start = last_transcribed + seg_start
+                    abs_end = last_transcribed + seg_end
+
+                    segment = bytes(buffer[abs_start:abs_end])
+
+                    tmp = os.path.join(
+                        runtime_dir(), f"live_{abs_start}_{abs_end}.wav"
+                    )
+                    try:
+                        write_wav(tmp, segment)
+                        text = await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda t=tmp, l=language: model.transcribe(t, language=l),
+                        )
+                        if text:
+                            emit_fn(text, stdout_mode)
+                        last_transcribed = abs_end
+                    finally:
+                        try:
+                            os.remove(tmp)
+                        except OSError:
+                            pass
+        except Exception as exc:
+            print(f"VAD loop error: {exc}", file=sys.stderr)
+
+    return last_transcribed
+
+
+async def _finish_recording(
+    proc,
+    read_task,
+    buffer,
+    model,
+    language,
+    stdout_mode,
+    *,
+    vad_task=None,
+    live_mode=False,
+):
+    if live_mode and vad_task is not None:
+        last_transcribed = await vad_task
+    else:
+        last_transcribed = 0
+
+    stop_recording(proc)
+    await read_task
+    await proc.wait()
+
+    if not buffer:
+        return
+
+    if live_mode:
+        remaining = buffer[last_transcribed:]
+        if remaining:
+            write_wav(AUDIO, bytes(remaining))
+            text = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: model.transcribe(AUDIO, language=language)
+            )
+            emit(text, stdout_mode)
+    else:
+        write_wav(AUDIO, buffer)
+        text = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: model.transcribe(AUDIO, language=language)
+        )
+        emit(text, stdout_mode)
+
+
 # Sentinel pushed onto the event queue when a reader stops (device unplugged
 # or errored) so the consumer wakes up and re-scans for keyboards.
 _RESCAN = object()
@@ -138,7 +245,14 @@ async def _pump_device(dev, queue):
         await queue.put(_RESCAN)
 
 
-async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
+async def run_daemon(
+    hotkey_code,
+    model,
+    stdout_mode=False,
+    language=None,
+    live_mode=False,
+    vad=None,
+):
     asyncio.get_running_loop().set_exception_handler(_ignore_evdev_teardown_errors)
     # Outer loop re-acquires keyboards whenever one disappears so the daemon
     # survives unplug/replug without user intervention.  The loop is
@@ -161,6 +275,8 @@ async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
         proc = None
         read_task = None
         buffer = None
+        vad_task = None
+        stop_vad = None
         try:
             while True:
                 event = await queue.get()
@@ -177,30 +293,72 @@ async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
                         held.add(event.code)
                         if keys_held(held) and proc is None:
                             proc, read_task, buffer = await _start_recording()
+                            if live_mode:
+                                stop_vad = asyncio.Event()
+                                vad.reset()
+                                vad_task = asyncio.create_task(
+                                    _live_vad_loop(
+                                        buffer,
+                                        model,
+                                        language,
+                                        emit,
+                                        vad,
+                                        stop_vad,
+                                        stdout_mode,
+                                    )
+                                )
                     elif event.value == 0:
                         held.discard(event.code)
                         if proc is not None:
-                            text = await transcribe(
-                                proc, read_task, buffer, model, language
+                            await _finish_recording(
+                                proc,
+                                read_task,
+                                buffer,
+                                model,
+                                language,
+                                stdout_mode,
+                                vad_task=vad_task,
+                                live_mode=live_mode,
                             )
-                            emit(text, stdout_mode)
-                            proc = read_task = buffer = None
+                            proc = read_task = buffer = vad_task = stop_vad = None
                 else:
                     if event.code != hotkey_code:
                         continue
                     if event.value == 1 and proc is None:
                         proc, read_task, buffer = await _start_recording()
+                        if live_mode:
+                            stop_vad = asyncio.Event()
+                            vad.reset()
+                            vad_task = asyncio.create_task(
+                                _live_vad_loop(
+                                    buffer,
+                                    model,
+                                    language,
+                                    emit,
+                                    vad,
+                                    stop_vad,
+                                    stdout_mode,
+                                )
+                            )
                     elif event.value == 0 and proc is not None:
-                        text = await transcribe(
-                            proc, read_task, buffer, model, language
+                        await _finish_recording(
+                            proc,
+                            read_task,
+                            buffer,
+                            model,
+                            language,
+                            stdout_mode,
+                            vad_task=vad_task,
+                            live_mode=live_mode,
                         )
-                        emit(text, stdout_mode)
-                        proc = read_task = buffer = None
+                        proc = read_task = buffer = vad_task = stop_vad = None
         finally:
             for reader in readers:
                 reader.cancel()
             await asyncio.gather(*readers, return_exceptions=True)
             if proc is not None:
+                if live_mode and stop_vad is not None:
+                    stop_vad.set()
                 stop_recording(proc)
             await asyncio.sleep(KEYBOARD_RECONNECT_DELAY_S)
 
@@ -233,14 +391,33 @@ def main():
     model_id = args.model or cfg.get("model", DEFAULT_MODEL)
     model = load_model(model_id, engine=engine)
 
+    live_mode = args.live or cfg.get("live") in ("1", "true", "yes")
+    vad = None
+    if live_mode:
+        from .vad import load_vad
+
+        vad_engine = cfg.get("vad_engine", "fsmn-vad")
+        check_deps(engine)
+        vad = load_vad(vad_engine)
+
     language = args.language or cfg.get("language") or None
     lang_str = language or "auto-detect"
+    live_str = ", live" if live_mode else ""
 
     print(
-        f"whisper-anywhere ready — mode: {mode_str}, language: {lang_str}",
+        f"whisper-anywhere ready — mode: {mode_str}, language: {lang_str}{live_str}",
         file=sys.stderr,
     )
-    asyncio.run(run_daemon(hotkey_code, model, stdout_mode, language))
+    asyncio.run(
+        run_daemon(
+            hotkey_code,
+            model,
+            stdout_mode,
+            language,
+            live_mode=live_mode,
+            vad=vad,
+        )
+    )
 
 
 if __name__ == "__main__":

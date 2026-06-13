@@ -1,13 +1,22 @@
 import asyncio
 import json
 import os
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
 from evdev import ecodes
 
 import whisper_anywhere.__main__ as main_module
-from whisper_anywhere.__main__ import acquire_lock, _remove_lock, emit, LOCK_PATH
+from whisper_anywhere.__main__ import (
+    acquire_lock,
+    _remove_lock,
+    emit,
+    LOCK_PATH,
+    _live_vad_loop,
+    _finish_recording,
+    _start_recording,
+)
 
 
 class TestSingleInstance:
@@ -122,8 +131,6 @@ class _FakeDevice:
 
 class TestRunDaemonMultiKeyboard:
     def test_hotkey_on_any_keyboard_triggers_recording(self):
-        # Regression: with multiple keyboards connected the hotkey must work on
-        # whichever one the user presses it on, not only the first device.
         idle_keyboard = _FakeDevice([])
         used_keyboard = _FakeDevice(
             [
@@ -139,10 +146,10 @@ class TestRunDaemonMultiKeyboard:
         async def fake_start():
             nonlocal starts
             starts += 1
-            return ("proc", "read_task", "buffer")
+            return (_async_mock(), asyncio.create_task(asyncio.sleep(0)), bytearray(b"test"))
 
-        async def fake_transcribe(proc, read_task, buffer, model, language=None):
-            return "transcribed text"
+        async def fake_finish(proc, read_task, buffer, model, language, stdout_mode, **kw):
+            emitted.append("transcribed text")
 
         async def scenario():
             task = asyncio.create_task(main_module.run_daemon(None, model=None))
@@ -160,11 +167,254 @@ class TestRunDaemonMultiKeyboard:
                 return_value=[idle_keyboard, used_keyboard],
             ),
             patch.object(main_module, "_start_recording", fake_start),
-            patch.object(main_module, "transcribe", fake_transcribe),
-            patch.object(main_module, "emit", lambda text, mode: emitted.append(text)),
+            patch.object(main_module, "_finish_recording", fake_finish),
             patch.object(main_module, "stop_recording", lambda proc: None),
         ):
             asyncio.run(scenario())
 
         assert starts == 1
         assert emitted == ["transcribed text"]
+
+
+class TestLiveVADLoop:
+    # Internal constants from _live_vad_loop
+    MIN_SEGMENT_BYTES = int(0.5 * 16000 * 2)
+
+    @pytest.mark.asyncio
+    async def test_transcribes_complete_segment(self):
+        seg_samples = 8000
+        buffer = bytearray(b"\x00\x01" * (seg_samples + 8000 + 100))
+        stop_event = asyncio.Event()
+        emitted = []
+
+        class _MockVAD:
+            def detect(self, audio, rate):
+                return [(0, seg_samples)]
+
+        model = MagicMock()
+        model.transcribe.return_value = "hello"
+
+        task = asyncio.create_task(
+            _live_vad_loop(buffer, model, None, lambda t, m: emitted.append(t), _MockVAD(), stop_event, False)
+        )
+        await asyncio.sleep(0.3)
+        stop_event.set()
+        result = await task
+
+        assert result == seg_samples * 2
+        assert emitted == ["hello"]
+
+    @pytest.mark.asyncio
+    async def test_skips_incomplete_segment(self):
+        buffer = bytearray(b"\x00\x01" * 2000)
+        stop_event = asyncio.Event()
+        emitted = []
+
+        class _MockVAD:
+            def detect(self, audio, rate):
+                return [(0, 1000)]
+
+        model = MagicMock()
+
+        task = asyncio.create_task(
+            _live_vad_loop(buffer, model, None, lambda t, m: emitted.append(t), _MockVAD(), stop_event, False)
+        )
+        await asyncio.sleep(0.3)
+        stop_event.set()
+        result = await task
+
+        assert result == 0
+        assert emitted == []
+
+    @pytest.mark.asyncio
+    async def test_skips_min_segment_too_short(self):
+        buffer = bytearray(b"\x00\x01" * 3000)
+        stop_event = asyncio.Event()
+        emitted = []
+
+        class _MockVAD:
+            def detect(self, audio, rate):
+                return [(0, 50)]
+
+        model = MagicMock()
+
+        task = asyncio.create_task(
+            _live_vad_loop(buffer, model, None, lambda t, m: emitted.append(t), _MockVAD(), stop_event, False)
+        )
+        await asyncio.sleep(0.3)
+        stop_event.set()
+        result = await task
+
+        assert result == 0
+
+    @pytest.mark.asyncio
+    async def test_recovers_from_vad_error(self):
+        seg_samples = 8000
+        buffer = bytearray(b"\x00\x01" * (seg_samples + 8000 + 100))
+        stop_event = asyncio.Event()
+        emitted = []
+        call_count = 0
+
+        class _FailingVAD:
+            def detect(self, audio, rate):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    raise RuntimeError("vad failure")
+                return [(0, seg_samples)]
+
+        model = MagicMock()
+        model.transcribe.return_value = "hello"
+
+        task = asyncio.create_task(
+            _live_vad_loop(buffer, model, None, lambda t, m: emitted.append(t), _FailingVAD(), stop_event, False)
+        )
+        await asyncio.sleep(0.5)
+        stop_event.set()
+        result = await task
+
+        assert result == seg_samples * 2
+        assert emitted == ["hello"]
+
+    @pytest.mark.asyncio
+    async def test_force_boundary_transcribes_long_segment(self):
+        buffer = bytearray(b"\x00\x01" * (15 * 16000 + 1600))
+        stop_event = asyncio.Event()
+        emitted = []
+
+        class _MockVAD:
+            def detect(self, audio, rate):
+                return [(0, 15 * 16000)]
+
+        model = MagicMock()
+        model.transcribe.return_value = "long speech"
+
+        task = asyncio.create_task(
+            _live_vad_loop(buffer, model, None, lambda t, m: emitted.append(t), _MockVAD(), stop_event, False)
+        )
+        await asyncio.sleep(0.3)
+        stop_event.set()
+        result = await task
+
+        assert result == 15 * 16000 * 2
+        assert emitted == ["long speech"]
+
+
+def _async_mock():
+    m = MagicMock()
+    async def async_wait():
+        return 0
+    m.wait = async_wait
+    return m
+
+
+class TestFinishRecording:
+    @pytest.mark.asyncio
+    async def test_non_live_transcribes_full_buffer(self):
+        buffer = bytearray(b"\x00\x01" * 100)
+        proc = _async_mock()
+        read_task = asyncio.create_task(asyncio.sleep(0))
+        model = MagicMock()
+        model.transcribe.return_value = "full text"
+
+        with (
+            patch.object(main_module, "write_wav"),
+            patch.object(main_module, "emit") as mock_emit,
+        ):
+            await _finish_recording(proc, read_task, buffer, model, None, False)
+
+        model.transcribe.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_live_with_vad_uses_remaining(self):
+        buffer = bytearray(b"\x00\x01" * 2000)
+        proc = _async_mock()
+        read_task = asyncio.create_task(asyncio.sleep(0))
+
+        async def fake_vad_task():
+            return 4000
+
+        model = MagicMock()
+        model.transcribe.return_value = ""
+
+        with (
+            patch.object(main_module, "write_wav"),
+            patch.object(main_module, "emit"),
+        ):
+            await _finish_recording(
+                proc, read_task, buffer, model, None, False,
+                vad_task=fake_vad_task(), live_mode=True,
+            )
+
+        model.transcribe.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_live_with_remaining_transcribes_it(self):
+        buffer = bytearray(b"\x00\x01" * 3000)
+        proc = _async_mock()
+        read_task = asyncio.create_task(asyncio.sleep(0))
+
+        async def fake_vad_task():
+            return 2000
+
+        model = MagicMock()
+        model.transcribe.return_value = "remaining text"
+
+        with (
+            patch.object(main_module, "write_wav") as mock_wav,
+            patch.object(main_module, "emit") as mock_emit,
+        ):
+            await _finish_recording(
+                proc, read_task, buffer, model, None, False,
+                vad_task=fake_vad_task(), live_mode=True,
+            )
+
+        model.transcribe.assert_called_once()
+        mock_emit.assert_called_once_with("remaining text", False)
+
+
+class TestRunDaemonLiveMode:
+    def test_live_mode_starts_vad_task(self):
+        keyboard = _FakeDevice([
+            _key_event(ecodes.KEY_LEFTCTRL, 1),
+            _key_event(ecodes.KEY_LEFTMETA, 1),
+            _key_event(ecodes.KEY_SPACE, 1),
+            _key_event(ecodes.KEY_SPACE, 0),
+        ])
+        starts = 0
+        emitted = []
+
+        async def fake_start():
+            nonlocal starts
+            starts += 1
+            return ("proc", "read_task", "buffer")
+
+        class _MockVAD:
+            def detect(self, audio, rate):
+                return [(0, 1000)]
+            def reset(self):
+                pass
+
+        async def scenario():
+            task = asyncio.create_task(
+                main_module.run_daemon(
+                    None, model=None, live_mode=True, vad=_MockVAD()
+                )
+            )
+            await asyncio.sleep(0.3)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        with (
+            patch.object(main_module, "find_keyboards", return_value=[keyboard]),
+            patch.object(main_module, "_start_recording", fake_start),
+            patch.object(main_module, "_finish_recording") as mock_finish,
+            patch.object(main_module, "stop_recording", lambda proc: None),
+        ):
+            asyncio.run(scenario())
+
+        assert starts == 1
+        mock_finish.assert_awaited_once()

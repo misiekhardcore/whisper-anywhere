@@ -6,6 +6,7 @@ from .transcribe import (
     register_engine,
     registered_engines,
 )
+from .vad import VAD, FsmnVAD, load_vad
 
 __all__ = [
     "Transcriber",
@@ -14,4 +15,7 @@ __all__ = [
     "load_model",
     "register_engine",
     "registered_engines",
+    "VAD",
+    "FsmnVAD",
+    "load_vad",
 ]

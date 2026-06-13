@@ -97,6 +97,11 @@ def parse_args():
         action="store_true",
         help="Write transcribed text as JSON lines to stdout instead of ydotool",
     )
+    p.add_argument(
+        "--live",
+        action="store_true",
+        help="Streaming mode: transcribe and type phrases as you speak using VAD",
+    )
     return p.parse_args()
 
 
