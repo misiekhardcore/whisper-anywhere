@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "whisper-anywhere"
 version = "1.1.0"
 description = "Hold a hotkey, speak, release - text appears wherever the cursor is"
-requires-python = ">=3.14"
+requires-python = ">=3.9"
 
 [project.scripts]
 whisper-anywhere = "whisper_anywhere.__main__:main"
