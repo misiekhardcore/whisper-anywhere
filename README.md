@@ -65,6 +65,9 @@ hotkey=KEY_F12
 
 # Model size
 model=distil-medium.en
+
+# Force a language (e.g. en, pl, de). Omit to auto-detect.
+# language=en
 ```
 
 ### Command-line options
@@ -73,6 +76,7 @@ model=distil-medium.en
 whisper-anywhere --hotkey KEY_F12     # single-key mode
 whisper-anywhere --hotkey KEY_GRAVE   # use backtick key
 whisper-anywhere --model distil-small.en
+whisper-anywhere --language en        # force language (default: auto-detect)
 whisper-anywhere --stdout             # JSON lines output (for opencode plugin)
 ```
 

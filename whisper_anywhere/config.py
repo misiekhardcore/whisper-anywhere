@@ -62,6 +62,8 @@ def parse_args():
                     help="Single key like KEY_F12. Omit for Ctrl+Super+Space combo.")
     p.add_argument("--model", default=None,
                     help="Model name (default: distil-medium.en)")
+    p.add_argument("--language", default=None,
+                    help="Force a language code like en, pl, de. Omit to auto-detect.")
     p.add_argument("--stdout", action="store_true",
                     help="Write transcribed text as JSON lines to stdout instead of ydotool")
     return p.parse_args()
