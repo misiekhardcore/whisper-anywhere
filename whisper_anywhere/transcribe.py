@@ -1,10 +1,10 @@
 import re
 import sys
 
-DEFAULT_ENGINE = sensevoice
+DEFAULT_ENGINE = "faster-whisper"
 FASTER_WHISPER_DEFAULT = "distil-medium.en"
 SENSEVOICE_DEFAULT = "iic/SenseVoiceSmall"
-DEFAULT_MODEL = SENSEVOICE_DEFAULT
+DEFAULT_MODEL = FASTER_WHISPER_DEFAULT
 
 _SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
 
