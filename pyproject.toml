@@ -17,6 +17,7 @@ dev = ["pytest", "pytest-asyncio", "build"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
+markers = ["integration: real-model e2e (needs faster-whisper + model download)"]
 
 [tool.setuptools.packages.find]
 include = ["whisper_anywhere*"]
