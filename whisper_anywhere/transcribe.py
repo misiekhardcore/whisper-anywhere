@@ -8,6 +8,8 @@ DEFAULT_MODEL = FASTER_WHISPER_DEFAULT
 
 _SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
 
+_SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
+
 
 class FasterWhisperTranscriber:
     def __init__(self, model_id):
