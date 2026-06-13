@@ -4,9 +4,13 @@ import struct
 
 from .config import runtime_dir
 
+# Fixed requirements for whisper.cpp input — not device-native parameters.
+# parec is told to convert to this format regardless of the microphone's native rate.
 SAMPLE_RATE = 16000
-SAMPLE_WIDTH = 2  # s16le
+SAMPLE_WIDTH = 2  # s16le = 2 bytes per sample
 CHANNELS = 1
+PAREC_FORMAT = "s16le"
+PAREC_LATENCY_MS = 30
 
 # Cap a single recording so a stuck/held hotkey can't run parec forever.
 MAX_RECORDING_SECONDS = 60

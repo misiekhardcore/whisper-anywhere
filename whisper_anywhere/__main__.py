@@ -8,12 +8,20 @@ import sys
 
 from evdev import ecodes
 
-from .audio import write_wav, read_audio, stop_recording, AUDIO
+from .audio import (
+    write_wav, read_audio, stop_recording,
+    AUDIO, SAMPLE_RATE, CHANNELS, PAREC_FORMAT, PAREC_LATENCY_MS,
+)
 from .config import check_deps, load_config, parse_args, handler, runtime_dir
 from .keyboard import find_keyboard, keys_held, WANTED_MODS
 
 LOCK_PATH = os.path.join(runtime_dir(), "lock")
 _lock_fd = None
+
+# How long to wait between keyboard re-scan attempts (device absent / hotplug).
+KEYBOARD_SCAN_DELAY_S = 2
+# How long to wait before re-scanning after a mid-session OSError (e.g. unplug).
+KEYBOARD_RECONNECT_DELAY_S = 1
 
 
 def acquire_lock():
@@ -83,8 +91,12 @@ def emit(text, stdout_mode):
 async def _start_recording():
     buffer = bytearray()
     proc = await asyncio.create_subprocess_exec(
-        "parec", "--format=s16le", "--rate=16000",
-        "--channels=1", "--raw", "--latency-msec=30",
+        "parec",
+        f"--format={PAREC_FORMAT}",
+        f"--rate={SAMPLE_RATE}",
+        f"--channels={CHANNELS}",
+        "--raw",
+        f"--latency-msec={PAREC_LATENCY_MS}",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )
@@ -93,14 +105,15 @@ async def _start_recording():
 
 
 async def run_daemon(hotkey_code, model, stdout_mode=False):
-    # Outer loop re-acquires the keyboard if it is unplugged/replugged so the
-    # daemon recovers instead of silently going dead.
+    # Outer loop re-acquires the keyboard whenever the device disappears so the
+    # daemon survives unplug/replug without user intervention.  The loop is
+    # intentionally unbounded: a hotkey daemon should always recover.
     while True:
         try:
             dev = find_keyboard()
         except RuntimeError as exc:
-            print(f"{exc} — retrying in 2s", file=sys.stderr)
-            await asyncio.sleep(2)
+            print(f"{exc} — retrying in {KEYBOARD_SCAN_DELAY_S}s", file=sys.stderr)
+            await asyncio.sleep(KEYBOARD_SCAN_DELAY_S)
             continue
 
         held = set()
@@ -138,7 +151,7 @@ async def run_daemon(hotkey_code, model, stdout_mode=False):
             print(f"keyboard input error ({exc}); re-scanning devices", file=sys.stderr)
             if proc is not None:
                 stop_recording(proc)
-            await asyncio.sleep(1)
+            await asyncio.sleep(KEYBOARD_RECONNECT_DELAY_S)
 
 
 def main():
