@@ -6,6 +6,7 @@ BIN_DIR="$HOME/.local/bin"
 BIN_TARGET="$BIN_DIR/whisper-anywhere"
 CONFIG_DIR="$HOME/.config/whisper-anywhere"
 AUTOSTART_DIR="$HOME/.config/autostart"
+SERVICE_DIR="$HOME/.config/systemd/user"
 MODEL="${MODEL:-distil-medium.en}"
 HOTKEY="${HOTKEY:-}"
 PYTHON="${PYTHON:-$(which python3)}"
@@ -114,26 +115,40 @@ step_install_package() {
     info "installed as pip package from $REPO_DIR"
 }
 
-step_autostart() {
+step_service() {
     echo ""
-    echo "==> Setting up autostart..."
-    mkdir -p "$AUTOSTART_DIR"
+    echo "==> Setting up systemd user service (autostart + logging)..."
+    mkdir -p "$SERVICE_DIR"
 
-    HOTKEY_ARG=""
-    if [ -n "$HOTKEY" ]; then
-        HOTKEY_ARG=" --hotkey $HOTKEY"
-    fi
+    # Hotkey/model/language are read from the config file, so the unit never
+    # needs regenerating when those change — just edit config and restart.
+    cat > "$SERVICE_DIR/whisper-anywhere.service" << EOF
+[Unit]
+Description=whisper-anywhere voice dictation daemon
+After=ydotool.service graphical-session.target
+Wants=ydotool.service
 
-    cat > "$AUTOSTART_DIR/whisper-anywhere.desktop" << EOF
-[Desktop Entry]
-Type=Application
-Name=whisper-anywhere
-Comment=Voice dictation daemon — hold hotkey, speak, release
-Exec=$BIN_TARGET$HOTKEY_ARG
-Terminal=false
-X-GNOME-Autostart-enabled=true
+[Service]
+ExecStart=$BIN_TARGET
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
 EOF
-    info "autostart entry created at $AUTOSTART_DIR/whisper-anywhere.desktop"
+
+    # Migrate away from the old XDG autostart entry if a previous install left one.
+    rm -f "$AUTOSTART_DIR/whisper-anywhere.desktop"
+
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now whisper-anywhere.service 2>/dev/null || true
+    if systemctl --user is-active whisper-anywhere.service &>/dev/null; then
+        info "whisper-anywhere service is running"
+    else
+        warn "service not active yet — after logging in run: systemctl --user enable --now whisper-anywhere.service"
+    fi
+    info "service installed at $SERVICE_DIR/whisper-anywhere.service"
+    info "logs: journalctl --user -u whisper-anywhere -f"
 }
 
 step_config() {
@@ -151,7 +166,10 @@ step_config() {
 # Uncomment to use a different model:
 # model=distil-medium.en
 # model=distil-small.en
-# model=distil-small.en
+# model=distil-large-v3
+#
+# Uncomment to force a language (default: auto-detect):
+# language=en
 EOF
         if [ -n "$HOTKEY" ]; then
             echo "hotkey=$HOTKEY" >> "$CONFIG_DIR/config"
@@ -184,9 +202,11 @@ summary() {
         echo "           (or set hotkey=KEY_F12 in $CONFIG_DIR/config)"
     fi
     echo ""
-    echo "  The daemon will auto-start on next login."
-    echo "  To start now:"
-    echo "    $ whisper-anywhere &"
+    echo "  The daemon runs as a systemd user service and auto-starts on login."
+    echo "    start now:  systemctl --user start whisper-anywhere"
+    echo "    status:     systemctl --user status whisper-anywhere"
+    echo "    logs:       journalctl --user -u whisper-anywhere -f"
+    echo "    after edits: systemctl --user restart whisper-anywhere"
     echo ""
     echo "  Note: The first run downloads the model — may take a moment."
     echo ""
@@ -208,6 +228,6 @@ step_ydotool_service
 step_python_packages
 step_install_package
 step_model
-step_autostart
 step_config
+step_service
 summary

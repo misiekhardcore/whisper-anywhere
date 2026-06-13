@@ -14,7 +14,9 @@ Offline, local voice dictation for Linux using faster-whisper (CTranslate2). No 
 
 - **Ubuntu** (or Debian-based distro with `apt`)
 - **PulseAudio or PipeWire** (for `parec`)
-- **GNOME or KDE Plasma on Wayland** (for `ydotool`)
+- **A Wayland or X11 desktop** — `ydotool` injects keystrokes via the kernel `uinput`
+  device, so it works under either (tested on GNOME and KDE Plasma)
+- **systemd** (the daemon installs as a `systemd --user` service)
 
 ## Quick install
 
@@ -46,15 +48,25 @@ systemctl --user enable --now ydotool.service
 
 ## Usage
 
+`install.sh` sets the daemon up as a `systemd --user` service that auto-starts on login:
+
+```bash
+systemctl --user status whisper-anywhere      # check it's running
+journalctl --user -u whisper-anywhere -f       # follow logs
+systemctl --user restart whisper-anywhere      # apply config changes
+```
+
+Or run it in the foreground (useful for debugging):
+
 ```bash
 whisper-anywhere
 ```
 
-Then hold the hotkey, speak, release. Text appears wherever your cursor is.
+Either way: hold the hotkey, speak, release. Text appears wherever your cursor is.
 
 ### Configuration
 
-Edit `~/.config/whisper-anywhere/config`:
+Edit `~/.config/whisper-anywhere/config`, then `systemctl --user restart whisper-anywhere`:
 
 ```ini
 # Single-key mode (F12 — no app conflicts)
@@ -108,12 +120,23 @@ whisper-anywhere/
 │   └── transcribe.py    # model loading
 ├── tests/               # pytest suite
 ├── install.sh           # one-shot installer
+├── uninstall.sh         # reverses install.sh
 ├── Makefile             # development commands
 ├── pyproject.toml       # package metadata
 ├── README.md
 ├── CONTRIBUTING.md
 └── LICENSE
 ```
+
+## Uninstall
+
+```bash
+bash uninstall.sh
+```
+
+Removes the systemd user service and the pip package, and offers to delete your config.
+The HuggingFace model cache, pip dependencies, and `input`-group membership are left in
+place (the script prints how to remove them).
 
 ## License
 
