@@ -162,7 +162,7 @@ async def test_real_e2e(installed_app, monkeypatch):
         pytest.skip("set WHISPER_E2E=1 to run the real-model e2e")
 
     pytest.importorskip("faster_whisper")
-    from faster_whisper import WhisperModel
+    from whisper_anywhere.transcribe import FasterWhisperTranscriber
 
     clips = sorted(FIXTURES.glob("*.wav"))
     if not clips:
@@ -171,7 +171,7 @@ async def test_real_e2e(installed_app, monkeypatch):
     expected = (FIXTURES / "transcript.txt").read_text().strip()
 
     try:
-        model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+        model = FasterWhisperTranscriber("tiny.en")
     except Exception as exc:  # offline / download failure
         pytest.skip(f"tiny.en model unavailable: {exc}")
 
