@@ -24,7 +24,10 @@ class SenseVoiceTranscriber:
         self._model = AutoModel(model=model_id, device="cpu")
 
     def transcribe(self, audio_path, language=None):
-        result = self._model.generate(input=audio_path)
+        kwargs = {"input": audio_path}
+        if language is not None:
+            kwargs["language"] = language
+        result = self._model.generate(**kwargs)
         if isinstance(result, list) and len(result) > 0:
             return result[0].get("text", "").strip()
         return str(result).strip() if result else ""
