@@ -2,13 +2,13 @@
 
 Hold a hotkey, speak, release — text appears in the focused window.
 
-Offline, local voice dictation for Linux using faster-whisper (CTranslate2). No cloud API, no data leaves your machine.
+Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, with faster-whisper available as an alternative engine. No cloud API, no data leaves your machine.
 
 ## How it works
 
 1. Hold a hotkey (default: `Ctrl+Super+Space`, configurable to a single key like `F12`)
 2. Speak — audio is recorded via PulseAudio
-3. Release — faster-whisper transcribes locally, `ydotool` types the text
+3. Release — SenseVoice transcribes locally, `ydotool` types the text
 
 ## Requirements
 
@@ -32,7 +32,9 @@ Or manually, step by step:
 # system dependencies
 sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool
 
-# Python package
+# Python packages (default: sensevoice via funasr)
+python3 -m pip install --user funasr
+# Optional: faster-whisper for alternative engine
 python3 -m pip install --user faster-whisper
 
 # install whisper-anywhere itself
@@ -75,8 +77,11 @@ hotkey=KEY_F12
 # Or omit for Ctrl+Super+Space combo
 # hotkey=
 
-# Model size
-model=distil-medium.en
+# Engine (sensevoice or faster-whisper)
+# engine=sensevoice
+
+# Model name (default: iic/SenseVoiceSmall)
+# model=iic/SenseVoiceSmall
 
 # Force a language (e.g. en, pl, de). Omit to auto-detect.
 # language=en
@@ -85,28 +90,37 @@ model=distil-medium.en
 ### Command-line options
 
 ```bash
-whisper-anywhere --hotkey KEY_F12     # single-key mode
-whisper-anywhere --hotkey KEY_GRAVE   # use backtick key
+whisper-anywhere --hotkey KEY_F12       # single-key mode
+whisper-anywhere --hotkey KEY_GRAVE     # use backtick key
+whisper-anywhere --engine faster-whisper
 whisper-anywhere --model distil-small.en
-whisper-anywhere --language en        # force language (default: auto-detect)
-whisper-anywhere --stdout             # JSON lines output (for opencode plugin)
+whisper-anywhere --language en          # force language (default: auto-detect)
+whisper-anywhere --stdout               # JSON lines output (for opencode plugin)
 ```
 
 > **opencode plugin**: [whisper-anywhere-opencode](https://github.com/misiekhardcore/whisper-anywhere-opencode) integrates dictation into the opencode TUI. Install via `npm install -g whisper-anywhere-opencode` and add to `opencode.json`.
 
 ## Models
 
-Downloaded automatically from HuggingFace on first use (by [faster-whisper](https://github.com/SYSTRAN/faster-whisper)):
+Downloaded automatically on first use. Default engine uses SenseVoice via [FunASR](https://github.com/modelscope/FunASR); alternative engine uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
+
+### SenseVoice (default, `--engine sensevoice`)
+
+| Model | Size | Notes |
+|---|---|---|
+| `iic/SenseVoiceSmall` | ~120 MB | Default, 50+ languages, MIT license, 15-17x faster than Whisper on CPU |
+
+### faster-whisper (`--engine faster-whisper`)
 
 | Model | Size | Quality |
 |---|---|---|
 | `distil-large-v3` | 1.5 GB | Best |
-| `distil-medium.en` | 300 MB | Better (default) |
+| `distil-medium.en` | 300 MB | Better |
 | `distil-small.en` | 94 MB | Good |
 
 Set via config or `--model`.
 
-> **Performance**: faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU with comparable accuracy.
+> **Performance**: SenseVoiceSmall is 15-17x faster than Whisper on CPU while supporting 50+ languages. faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU.
 
 ## Project layout
 

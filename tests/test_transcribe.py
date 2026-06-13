@@ -151,8 +151,12 @@ class TestLoadModel:
         assert isinstance(t, SenseVoiceTranscriber)
         mock_auto.assert_called_once_with(model="iic/SenseVoiceSmall", device="cpu")
 
+    def test_default_engine_is_sensevoice(self):
+        t = load_model(None)
+        assert isinstance(t, SenseVoiceTranscriber)
+
     def test_invalid_engine_raises(self):
-        with pytest.raises(ValueError, match="Unknown engine.*faster-whisper"):
+        with pytest.raises(ValueError, match="Unknown engine.*sensevoice"):
             load_model(None, "invalid")
 
 

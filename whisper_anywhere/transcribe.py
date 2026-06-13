@@ -2,10 +2,10 @@ import re
 import sys
 from typing import Optional, Protocol, runtime_checkable
 
-DEFAULT_ENGINE = "faster-whisper"
+DEFAULT_ENGINE = "sensevoice"
 FASTER_WHISPER_DEFAULT = "distil-medium.en"
 SENSEVOICE_DEFAULT = "iic/SenseVoiceSmall"
-DEFAULT_MODEL = FASTER_WHISPER_DEFAULT
+DEFAULT_MODEL = SENSEVOICE_DEFAULT
 
 _SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
 
@@ -71,7 +71,7 @@ register_engine("sensevoice", SenseVoiceTranscriber, SENSEVOICE_DEFAULT)
 
 
 def load_model(
-    model_id: Optional[str] = None, engine: str = "faster-whisper"
+    model_id: Optional[str] = None, engine: str = "sensevoice"
 ) -> Transcriber:
     if engine not in _ENGINES:
         raise ValueError(
