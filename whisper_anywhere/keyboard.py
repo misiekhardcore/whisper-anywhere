@@ -6,13 +6,24 @@ SPACE = {ecodes.KEY_SPACE}
 WANTED_MODS = CTRL | SUPER | SPACE
 
 
-def find_keyboard():
+def find_keyboards():
+    """Return every physical keyboard, so the daemon can listen on all of them.
+
+    Picking a single device is unreliable when more than one keyboard is
+    connected (e.g. a laptop's built-in keyboard plus an external one): the
+    user could press the hotkey on any of them. We therefore return all real
+    keyboards and let the caller read every device concurrently.
+    """
     skip = {"ydotool", "lid", "power", "sleep", "video"}
-    candidates = []
+    keyboards = []
     for path in list_devices():
         try:
             dev = InputDevice(path)
         except (OSError, PermissionError):
+            continue
+        # Empty phys = uinput/virtual device (e.g. ydotoold). Never listen on
+        # these or we would capture our own injected keystrokes.
+        if not dev.phys:
             continue
         name = dev.name.lower()
         if any(s in name for s in skip):
@@ -21,19 +32,15 @@ def find_keyboard():
         if ecodes.EV_KEY in caps:
             keys = caps[ecodes.EV_KEY]
             if ecodes.KEY_A in keys and ecodes.KEY_B in keys and ecodes.KEY_SPACE in keys:
-                candidates.append(dev)
+                keyboards.append(dev)
 
-    if not candidates:
+    if not keyboards:
         raise RuntimeError(
             "no suitable keyboard found. Make sure you're in the 'input' group"
             " and have a physical keyboard connected."
         )
 
-    # Prefer physical devices (non-empty phys = real hardware bus path) over
-    # uinput/virtual ones (empty phys), then break ties by event number so
-    # older/boot-time devices are preferred over late-created virtual devices.
-    candidates.sort(key=lambda d: (not d.phys, int(d.path.rsplit("event", 1)[-1])))
-    return candidates[0]
+    return keyboards
 
 
 def keys_held(held):
