@@ -1,6 +1,52 @@
+from unittest.mock import MagicMock, patch
+
 from evdev import ecodes
 
-from whisper_anywhere.keyboard import keys_held, CTRL, SUPER, SPACE, WANTED_MODS
+from whisper_anywhere.keyboard import keys_held, find_keyboard, CTRL, SUPER, SPACE, WANTED_MODS
+
+
+def _make_device(name, keys=(ecodes.KEY_A, ecodes.KEY_B, ecodes.KEY_SPACE)):
+    dev = MagicMock()
+    dev.name = name
+    dev.capabilities.return_value = {ecodes.EV_KEY: list(keys)}
+    return dev
+
+
+class TestFindKeyboard:
+    def _run(self, devices):
+        paths = [f"/dev/input/event{i}" for i in range(len(devices))]
+        with patch("whisper_anywhere.keyboard.list_devices", return_value=paths), \
+             patch("whisper_anywhere.keyboard.InputDevice", side_effect=devices):
+            return find_keyboard()
+
+    def test_returns_real_keyboard(self):
+        real_kb = _make_device("AT Translated Set 2 keyboard")
+        assert self._run([real_kb]) is real_kb
+
+    def test_skips_ydotool_virtual_device(self):
+        # ydotoold names its uinput device "ydotool virtual device"; it must
+        # never be returned as the keyboard to listen on.
+        virtual = _make_device("ydotool virtual device")
+        real_kb = _make_device("USB Keyboard")
+        assert self._run([virtual, real_kb]) is real_kb
+
+    def test_skips_lid_and_power(self):
+        lid = _make_device("Lid Switch")
+        power = _make_device("Power Button")
+        real_kb = _make_device("USB Keyboard")
+        assert self._run([lid, power, real_kb]) is real_kb
+
+    def test_raises_when_no_keyboard(self):
+        import pytest
+        virtual = _make_device("ydotool virtual device")
+        with pytest.raises(RuntimeError, match="no suitable keyboard"):
+            self._run([virtual])
+
+    def test_skips_device_without_alpha_keys(self):
+        import pytest
+        no_alpha = _make_device("Some Input Device", keys=(ecodes.KEY_VOLUMEUP,))
+        with pytest.raises(RuntimeError):
+            self._run([no_alpha])
 
 
 class TestKeysHeld:
