@@ -21,7 +21,9 @@ class TestFasterWhisperTranscriber:
     @patch("faster_whisper.WhisperModel")
     def test_init(self, mock_whisper):
         t = FasterWhisperTranscriber("tiny.en")
-        mock_whisper.assert_called_once_with("tiny.en", device="cpu", compute_type="int8")
+        mock_whisper.assert_called_once_with(
+            "tiny.en", device="cpu", compute_type="int8"
+        )
 
     @patch("faster_whisper.WhisperModel")
     def test_transcribe_returns_text(self, mock_whisper):
@@ -32,7 +34,9 @@ class TestFasterWhisperTranscriber:
         t = FasterWhisperTranscriber("tiny.en")
         result = t.transcribe("/tmp/t.wav")
         assert result == "hello world"
-        mock_whisper.return_value.transcribe.assert_called_once_with("/tmp/t.wav", beam_size=5, language=None)
+        mock_whisper.return_value.transcribe.assert_called_once_with(
+            "/tmp/t.wav", beam_size=5, language=None
+        )
 
     @patch("faster_whisper.WhisperModel")
     def test_transcribe_with_language(self, mock_whisper):
@@ -43,7 +47,9 @@ class TestFasterWhisperTranscriber:
         t = FasterWhisperTranscriber("tiny.en")
         result = t.transcribe("/tmp/t.wav", language="pl")
         assert result == "cześć"
-        mock_whisper.return_value.transcribe.assert_called_once_with("/tmp/t.wav", beam_size=5, language="pl")
+        mock_whisper.return_value.transcribe.assert_called_once_with(
+            "/tmp/t.wav", beam_size=5, language="pl"
+        )
 
     @patch("faster_whisper.WhisperModel")
     def test_transcribe_concatenates_multiple_segments(self, mock_whisper):
@@ -77,7 +83,9 @@ class TestSenseVoiceTranscriber:
         t = SenseVoiceTranscriber("iic/SenseVoiceSmall")
         result = t.transcribe("/tmp/t.wav", language="pl")
         assert result == "witaj świecie"
-        mock_auto.return_value.generate.assert_called_once_with(input="/tmp/t.wav", language="pl")
+        mock_auto.return_value.generate.assert_called_once_with(
+            input="/tmp/t.wav", language="pl"
+        )
 
     @patch("funasr.AutoModel")
     def test_transcribe_empty_result(self, mock_auto):
@@ -119,7 +127,9 @@ class TestLoadModel:
     def test_faster_whisper_custom_model(self, mock_whisper):
         t = load_model("tiny.en", "faster-whisper")
         assert isinstance(t, FasterWhisperTranscriber)
-        mock_whisper.assert_called_once_with("tiny.en", device="cpu", compute_type="int8")
+        mock_whisper.assert_called_once_with(
+            "tiny.en", device="cpu", compute_type="int8"
+        )
 
     @patch("funasr.AutoModel")
     def test_sensevoice_default_model(self, mock_auto):

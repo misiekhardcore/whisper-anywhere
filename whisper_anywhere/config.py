@@ -31,13 +31,19 @@ def check_deps(engine="faster-whisper"):
     try:
         from evdev import InputDevice
     except ImportError:
-        print("Missing python3-evdev. Run: pkexec apt install python3-evdev", file=sys.stderr)
+        print(
+            "Missing python3-evdev. Run: pkexec apt install python3-evdev",
+            file=sys.stderr,
+        )
         sys.exit(1)
     if engine == "faster-whisper":
         try:
             from faster_whisper import WhisperModel
         except ImportError:
-            print("Missing faster-whisper. Run: pip3 install --user faster-whisper", file=sys.stderr)
+            print(
+                "Missing faster-whisper. Run: pip3 install --user faster-whisper",
+                file=sys.stderr,
+            )
             sys.exit(1)
     elif engine == "sensevoice":
         try:
@@ -65,16 +71,30 @@ def load_config(path=None):
 
 def parse_args():
     p = argparse.ArgumentParser(description="whisper-anywhere voice dictation daemon")
-    p.add_argument("--hotkey", default=None,
-                    help="Single key like KEY_F12. Omit for Ctrl+Super+Space combo.")
-    p.add_argument("--model", default=None,
-                    help="Model name (default: distil-medium.en)")
-    p.add_argument("--language", default=None,
-                    help="Force a language code like en, pl, de. Omit to auto-detect.")
-    p.add_argument("--engine", default=None, choices=("faster-whisper", "sensevoice"),
-                    help="Transcription engine (default: faster-whisper)")
-    p.add_argument("--stdout", action="store_true",
-                    help="Write transcribed text as JSON lines to stdout instead of ydotool")
+    p.add_argument(
+        "--hotkey",
+        default=None,
+        help="Single key like KEY_F12. Omit for Ctrl+Super+Space combo.",
+    )
+    p.add_argument(
+        "--model", default=None, help="Model name (default: distil-medium.en)"
+    )
+    p.add_argument(
+        "--language",
+        default=None,
+        help="Force a language code like en, pl, de. Omit to auto-detect.",
+    )
+    p.add_argument(
+        "--engine",
+        default=None,
+        choices=("faster-whisper", "sensevoice"),
+        help="Transcription engine (default: faster-whisper)",
+    )
+    p.add_argument(
+        "--stdout",
+        action="store_true",
+        help="Write transcribed text as JSON lines to stdout instead of ydotool",
+    )
     return p.parse_args()
 
 

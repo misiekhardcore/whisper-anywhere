@@ -2,11 +2,22 @@ from unittest.mock import MagicMock, patch
 
 from evdev import ecodes
 
-from whisper_anywhere.keyboard import keys_held, find_keyboards, CTRL, SUPER, SPACE, WANTED_MODS
+from whisper_anywhere.keyboard import (
+    keys_held,
+    find_keyboards,
+    CTRL,
+    SUPER,
+    SPACE,
+    WANTED_MODS,
+)
 
 
-def _make_device(name, keys=(ecodes.KEY_A, ecodes.KEY_B, ecodes.KEY_SPACE),
-                 phys="usb-0000:00:14.0-1/input0", event_num=3):
+def _make_device(
+    name,
+    keys=(ecodes.KEY_A, ecodes.KEY_B, ecodes.KEY_SPACE),
+    phys="usb-0000:00:14.0-1/input0",
+    event_num=3,
+):
     dev = MagicMock()
     dev.name = name
     dev.phys = phys
@@ -22,8 +33,10 @@ def _virtual(name, event_num=10):
 class TestFindKeyboards:
     def _run(self, devices):
         paths = [dev.path for dev in devices]
-        with patch("whisper_anywhere.keyboard.list_devices", return_value=paths), \
-             patch("whisper_anywhere.keyboard.InputDevice", side_effect=devices):
+        with (
+            patch("whisper_anywhere.keyboard.list_devices", return_value=paths),
+            patch("whisper_anywhere.keyboard.InputDevice", side_effect=devices),
+        ):
             return find_keyboards()
 
     def test_returns_real_keyboard(self):
@@ -52,12 +65,14 @@ class TestFindKeyboards:
 
     def test_raises_when_no_keyboard(self):
         import pytest
+
         virtual = _virtual("ydotool virtual device")
         with pytest.raises(RuntimeError, match="no suitable keyboard"):
             self._run([virtual])
 
     def test_skips_device_without_alpha_keys(self):
         import pytest
+
         no_alpha = _make_device("Some Input Device", keys=(ecodes.KEY_VOLUMEUP,))
         with pytest.raises(RuntimeError):
             self._run([no_alpha])

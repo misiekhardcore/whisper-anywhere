@@ -175,7 +175,9 @@ async def test_real_e2e(installed_app, monkeypatch):
     except Exception as exc:  # offline / download failure
         pytest.skip(f"tiny.en model unavailable: {exc}")
 
-    text = await drive_dictation(model, pcm_from_wav(clips[0]), monkeypatch, timeout=120)
+    text = await drive_dictation(
+        model, pcm_from_wav(clips[0]), monkeypatch, timeout=120
+    )
 
     norm_expected, norm_actual = _normalize(expected), _normalize(text)
     ratio = SequenceMatcher(None, norm_expected, norm_actual).ratio()

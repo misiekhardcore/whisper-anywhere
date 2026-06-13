@@ -84,9 +84,17 @@ class TestParseArgs:
             assert args.model == "tiny.en"
 
     def test_both_args(self):
-        with patch.object(sys, "argv", [
-            "whisper-anywhere", "--hotkey", "KEY_GRAVE", "--model", "small",
-        ]):
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "whisper-anywhere",
+                "--hotkey",
+                "KEY_GRAVE",
+                "--model",
+                "small",
+            ],
+        ):
             args = parse_args()
             assert args.hotkey == "KEY_GRAVE"
             assert args.model == "small"

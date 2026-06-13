@@ -28,7 +28,9 @@ def stop_recording(proc):
         pass
 
 
-def write_wav(path, data, sample_rate=SAMPLE_RATE, sample_width=SAMPLE_WIDTH, channels=CHANNELS):
+def write_wav(
+    path, data, sample_rate=SAMPLE_RATE, sample_width=SAMPLE_WIDTH, channels=CHANNELS
+):
     with wave.open(path, "wb") as w:
         w.setnchannels(channels)
         w.setsampwidth(sample_width)

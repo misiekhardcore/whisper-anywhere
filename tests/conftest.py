@@ -41,7 +41,9 @@ def installed_app():
     assert SERVICE_UNIT.exists(), "install.sh did not create the systemd user unit"
 
     try:
-        yield types.SimpleNamespace(repo=REPO, bin=BIN, unit=SERVICE_UNIT, config=CONFIG)
+        yield types.SimpleNamespace(
+            repo=REPO, bin=BIN, unit=SERVICE_UNIT, config=CONFIG
+        )
     finally:
         # 'n' answers uninstall.sh's interactive "remove config?" prompt.
         subprocess.run(

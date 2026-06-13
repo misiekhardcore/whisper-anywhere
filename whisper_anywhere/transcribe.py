@@ -24,6 +24,7 @@ class FasterWhisperTranscriber:
             segments = result
         return " ".join(segment.text.strip() for segment in segments)
 
+
 class SenseVoiceTranscriber:
     def __init__(self, model_id):
         from funasr import AutoModel

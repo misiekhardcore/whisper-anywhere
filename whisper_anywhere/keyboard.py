@@ -31,7 +31,11 @@ def find_keyboards():
         caps = dev.capabilities()
         if ecodes.EV_KEY in caps:
             keys = caps[ecodes.EV_KEY]
-            if ecodes.KEY_A in keys and ecodes.KEY_B in keys and ecodes.KEY_SPACE in keys:
+            if (
+                ecodes.KEY_A in keys
+                and ecodes.KEY_B in keys
+                and ecodes.KEY_SPACE in keys
+            ):
                 keyboards.append(dev)
 
     if not keyboards:
