@@ -83,7 +83,7 @@ async def drive_dictation(model, pcm, monkeypatch, timeout=30):
         fake_key_event(ecodes.KEY_F12, 1),  # press
         fake_key_event(ecodes.KEY_F12, 0),  # release
     ]
-    monkeypatch.setattr(m, "find_keyboard", lambda: FakeKeyboard(events))
+    monkeypatch.setattr(m, "find_keyboards", lambda: [FakeKeyboard(events)])
 
     async def fake_start_recording():
         buffer = bytearray(pcm)  # mic input = pre-recorded audio
