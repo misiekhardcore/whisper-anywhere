@@ -216,11 +216,11 @@ def main():
     else:
         mode_str = "combo (Ctrl+Super+Space)"
 
-    from .transcribe import load_model, FASTER_WHISPER_DEFAULT
+    from .transcribe import load_model, DEFAULT_MODEL, DEFAULT_ENGINE
 
-    engine = args.engine or cfg.get("engine", "faster-whisper")
+    engine = args.engine or cfg.get("engine", DEFAULT_ENGINE)
     check_deps(engine)
-    model_id = args.model or cfg.get("model")
+    model_id = args.model or cfg.get("model", DEFAULT_MODEL)
     model = load_model(model_id, engine=engine)
 
     language = args.language or cfg.get("language") or None
