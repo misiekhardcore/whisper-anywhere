@@ -10,10 +10,9 @@ with a real `tiny.en` model and asserts the result against a known transcript.
 - `transcript.txt` — the exact expected transcript for that clip (used by the
   test; matching is tolerant, so punctuation/casing don't need to be perfect).
 
-## TODO: add the clip
+## Adding a test
 
-No audio file is committed yet (it couldn't be generated in the authoring
-environment — no `ffmpeg`/network). To enable the real e2e test:
+To enable the real e2e test:
 
 1. Obtain a short CC0/public-domain spoken clip. Suggested sources:
    - Wikimedia Commons (filter by CC0 / public domain), or
@@ -31,5 +30,5 @@ Until a `*.wav` is present, `test_real_e2e` self-skips, so the suite stays green
 
 _(fill in when the clip is added)_
 
-- Source URL:
+- Source URL: https://www.voiptroubleshooter.com/open_speech/american/OSR_us_000_0034_8k.wav
 - License: CC0 / public domain
