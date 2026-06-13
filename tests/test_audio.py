@@ -1,11 +1,17 @@
 import struct
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from whisper_anywhere.audio import write_wav, read_audio, AUDIO, SAMPLE_RATE
+from whisper_anywhere.audio import (
+    write_wav,
+    read_audio,
+    stop_recording,
+    AUDIO,
+    SAMPLE_RATE,
+)
 
 
 class TestWriteWav:
@@ -112,6 +118,29 @@ async def test_read_audio_large_chunks():
     assert buffer == bytearray(chunk * 2)
 
 
+@pytest.mark.asyncio
+async def test_read_audio_caps_at_max(monkeypatch):
+    from whisper_anywhere import audio
+
+    monkeypatch.setattr(audio, "MAX_RECORDING_BYTES", 8)
+    proc = AsyncMock()
+    proc.send_signal = MagicMock()
+    proc.stdout.read.side_effect = [b"xxxx", b"xxxx", b"xxxx", b""]
+    buffer = bytearray()
+    await audio.read_audio(proc, buffer)
+    # Cap reached after 8 bytes: parec is stopped and reading stops early.
+    proc.send_signal.assert_called_once()
+    assert len(buffer) == 8
+
+
+def test_stop_recording_ignores_dead_process():
+    proc = MagicMock()
+    proc.send_signal.side_effect = ProcessLookupError()
+    stop_recording(proc)  # must not raise
+
+
 def test_audio_constants():
-    assert AUDIO == "/tmp/whisper-anywhere.wav"
+    # Lives in a per-user runtime dir, not world-writable /tmp.
+    assert AUDIO.endswith("audio.wav")
+    assert "whisper-anywhere" in AUDIO
     assert SAMPLE_RATE == 16000

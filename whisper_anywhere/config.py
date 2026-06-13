@@ -6,6 +6,18 @@ import sys
 CONFIG_DIR = os.path.expanduser("~/.config/whisper-anywhere")
 
 
+def runtime_dir():
+    """Per-user, non-world-writable dir for the lock and temp audio.
+
+    Prefers $XDG_RUNTIME_DIR (tmpfs, mode 0700, cleaned on logout); falls back
+    to ~/.cache. Created with 0700 so other users can't read recorded audio.
+    """
+    base = os.environ.get("XDG_RUNTIME_DIR") or os.path.expanduser("~/.cache")
+    path = os.path.join(base, "whisper-anywhere")
+    os.makedirs(path, mode=0o700, exist_ok=True)
+    return path
+
+
 def check_deps():
     missing = []
     for cmd in ("parec", "ydotool"):
