@@ -2,7 +2,7 @@
 
 ## Project overview
 
-Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, release — text appears wherever the cursor is. Uses `faster-whisper` for transcription, `parec` for audio capture, `ydotool` for keystroke injection, and `evdev` for keyboard event reading.
+Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, release — text appears wherever the cursor is. Uses `sensevoice` via `funasr` for transcription by default (with `faster-whisper` as an alternative engine), `parec` for audio capture, `ydotool` for keystroke injection, and `evdev` for keyboard event reading.
 
 ## Tests and CI
 
@@ -13,7 +13,8 @@ Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, rel
 ## External Python packages
 
 - `evdev` — comes from the system package `python3-evdev` (apt). Must use apt because evdev needs to access `/dev/input/` devices.
-- `faster-whisper` — installed via `pip install --user faster-whisper` (PyPI). Provides CTranslate2-accelerated transcription.
+- `funasr` — installed via `pip install --user funasr` (PyPI). Provides the default SenseVoice transcription engine.
+- `faster-whisper` — installed via `pip install --user faster-whisper` (PyPI). Alternative CTranslate2-accelerated transcription.
 
 ## Package structure
 
@@ -47,15 +48,15 @@ whisper_anywhere/
 ## Config and data locations
 
 - Config: `~/.config/whisper-anywhere/config` (simple `key=value` format, comments with `#`)
-- Models: HuggingFace cache, `~/.cache/huggingface/hub/` (managed by faster-whisper)
+- Models: `~/.cache/modelscope/hub/` (SenseVoice via FunASR) or `~/.cache/huggingface/hub/` (faster-whisper)
 - Lock + temp audio: `$XDG_RUNTIME_DIR/whisper-anywhere/` (0700), falling back to
   `~/.cache/whisper-anywhere/` — see `config.runtime_dir()`
 
 ## Script architecture
 
 - `find_keyboards()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
-- `check_deps()` — verifies `parec`, `ydotool` are on PATH and `evdev`/`faster_whisper` import works
-- `load_model()` — initializes faster-whisper `WhisperModel` (auto-downloads from HuggingFace on first use)
+- `check_deps(engine)` — verifies `parec`, `ydotool` are on PATH, `evdev` imports, and the selected engine's package (`funasr` or `faster_whisper`) is importable
+- `load_model()` — initializes the transcription engine (default: SenseVoice via `funasr.AutoModel`). Pluggable via the `Transcriber` protocol — see `register_engine()`.
 - `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
 - `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
 - `transcribe()` — stops `parec` via `stop_recording()`, drains remaining audio via `read_audio`, writes WAV, runs model (with optional `language`). Returns text.
@@ -66,5 +67,6 @@ whisper_anywhere/
 - `parec` is started with `--latency-msec=30` to shrink PulseAudio's internal capture buffer from ~250ms to 30ms, so the tail loss on SIGINT is imperceptible
 - Two hotkey modes: combo (Ctrl+Super+Space, all three must be held) or single-key (any `KEY_*` from `linux/input-event-codes.h`)
 - Hotkey priority: CLI `--hotkey` > config file `hotkey=` > default combo
-- Model priority: CLI `--model` > config file `model=` > `distil-medium.en`
+- Model priority: CLI `--model` > config file `model=` > `iic/SenseVoiceSmall`
+- Engine priority: CLI `--engine` > config file `engine=` > `sensevoice`
 - Language priority: CLI `--language` > config file `language=` > auto-detect

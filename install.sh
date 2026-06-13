@@ -7,7 +7,7 @@ BIN_TARGET="$BIN_DIR/whisper-anywhere"
 CONFIG_DIR="$HOME/.config/whisper-anywhere"
 AUTOSTART_DIR="$HOME/.config/autostart"
 SERVICE_DIR="$HOME/.config/systemd/user"
-MODEL="${MODEL:-distil-medium.en}"
+MODEL="${MODEL:-iic/SenseVoiceSmall}"
 HOTKEY="${HOTKEY:-}"
 PYTHON="${PYTHON:-$(which python3)}"
 
@@ -62,6 +62,10 @@ step_system_packages() {
 step_python_packages() {
     echo ""
     echo "==> Installing Python packages..."
+    # sensevoice (default engine) via funasr
+    "$PYTHON" -m pip install --user funasr 2>/dev/null \
+        || CC=gcc CXX=g++ "$PYTHON" -m pip install --user --break-system-packages funasr
+    # faster-whisper is also installed so users can switch with --engine faster-whisper
     "$PYTHON" -m pip install --user faster-whisper 2>/dev/null \
         || "$PYTHON" -m pip install --user --break-system-packages faster-whisper
 }
@@ -96,15 +100,16 @@ step_ydotool_service() {
 
 step_model() {
     echo ""
-    echo "==> Pre-loading whisper model ($MODEL)..."
-    # faster-whisper auto-downloads on first use; this pre-warms the cache
+    echo "==> Pre-loading default model ($MODEL)..."
+    # funasr/SenseVoice auto-downloads on first use; this pre-warms the cache.
+    # Non-fatal: the model will download on first daemon run if skipped here.
     "$PYTHON" -c "
-from faster_whisper import WhisperModel
+from funasr import AutoModel
 import sys
 sys.stderr.write('Downloading model $MODEL...\n')
-m = WhisperModel('$MODEL', device='cpu', compute_type='int8')
+m = AutoModel(model='$MODEL', device='cpu')
 sys.stderr.write('Model $MODEL ready.\n')
-"
+" 2>/dev/null || warn "model pre-load skipped (will download on first use)"
 }
 
 step_install_package() {
@@ -163,10 +168,11 @@ step_config() {
 # hotkey=KEY_F7
 # hotkey=KEY_GRAVE
 #
+# Engine (sensevoice or faster-whisper):
+# engine=sensevoice
+#
 # Uncomment to use a different model:
-# model=distil-medium.en
-# model=distil-small.en
-# model=distil-large-v3
+# model=iic/SenseVoiceSmall
 #
 # Uncomment to force a language (default: auto-detect):
 # language=en

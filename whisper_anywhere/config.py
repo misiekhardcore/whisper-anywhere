@@ -90,7 +90,7 @@ def parse_args():
         "--engine",
         default=None,
         choices=("faster-whisper", "sensevoice"),
-        help="Transcription engine (default: faster-whisper)",
+        help="Transcription engine (default: sensevoice)",
     )
     p.add_argument(
         "--stdout",
