@@ -83,7 +83,9 @@ class TestSenseVoiceTranscriber:
         t = SenseVoiceTranscriber("iic/SenseVoiceSmall")
         result = t.transcribe("/tmp/t.wav")
         assert result == "hello world"
-        mock_auto.return_value.generate.assert_called_once_with(input="/tmp/t.wav")
+        mock_auto.return_value.generate.assert_called_once_with(
+            input="/tmp/t.wav", use_itn=True
+        )
 
     @patch("funasr.AutoModel")
     def test_transcribe_with_language(self, mock_auto):
@@ -93,7 +95,7 @@ class TestSenseVoiceTranscriber:
         result = t.transcribe("/tmp/t.wav", language="pl")
         assert result == "witaj świecie"
         mock_auto.return_value.generate.assert_called_once_with(
-            input="/tmp/t.wav", language="pl"
+            input="/tmp/t.wav", use_itn=True, language="pl"
         )
 
     @patch("funasr.AutoModel")
