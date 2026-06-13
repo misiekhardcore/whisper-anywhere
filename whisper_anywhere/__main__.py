@@ -13,7 +13,7 @@ from .audio import (
     AUDIO, SAMPLE_RATE, CHANNELS, PAREC_FORMAT, PAREC_LATENCY_MS,
 )
 from .config import check_deps, load_config, parse_args, handler, runtime_dir
-from .keyboard import find_keyboard, keys_held, WANTED_MODS
+from .keyboard import find_keyboards, keys_held, WANTED_MODS
 
 LOCK_PATH = os.path.join(runtime_dir(), "lock")
 _lock_fd = None
@@ -43,8 +43,12 @@ def _remove_lock():
     global _lock_fd
     if _lock_fd is None:
         return
+    # Close the fd to release the flock, but leave the file in place. Unlinking
+    # it would break exclusion during restart races: flock is keyed on the
+    # inode, so a process that re-creates the path gets a fresh inode and locks
+    # it independently, letting two daemons run at once.
     try:
-        os.remove(LOCK_PATH)
+        _lock_fd.close()
     except OSError:
         pass
     _lock_fd = None
@@ -98,30 +102,66 @@ async def _start_recording():
         "--raw",
         f"--latency-msec={PAREC_LATENCY_MS}",
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
+        stderr=sys.stderr,
     )
     read_task = asyncio.create_task(read_audio(proc, buffer))
     return proc, read_task, buffer
 
 
+# Sentinel pushed onto the event queue when a reader stops (device unplugged
+# or errored) so the consumer wakes up and re-scans for keyboards.
+_RESCAN = object()
+
+
+def _ignore_evdev_teardown_errors(loop, context):
+    # On SIGINT/SIGTERM the signal handler raises SystemExit mid-poll; evdev's
+    # already-scheduled fd callback then fires on a finalized future and raises
+    # InvalidStateError. It is harmless shutdown noise, so swallow just that.
+    if isinstance(context.get("exception"), asyncio.InvalidStateError):
+        return
+    loop.default_exception_handler(context)
+
+
+async def _pump_device(dev, queue):
+    """Forward one device's key events into the shared queue until it stops."""
+    try:
+        async for event in dev.async_read_loop():
+            await queue.put(event)
+    except OSError:
+        pass
+    finally:
+        await queue.put(_RESCAN)
+
+
 async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
-    # Outer loop re-acquires the keyboard whenever the device disappears so the
-    # daemon survives unplug/replug without user intervention.  The loop is
+    asyncio.get_running_loop().set_exception_handler(_ignore_evdev_teardown_errors)
+    # Outer loop re-acquires keyboards whenever one disappears so the daemon
+    # survives unplug/replug without user intervention.  The loop is
     # intentionally unbounded: a hotkey daemon should always recover.
     while True:
         try:
-            dev = find_keyboard()
+            devices = find_keyboards()
         except RuntimeError as exc:
             print(f"{exc} — retrying in {KEYBOARD_SCAN_DELAY_S}s", file=sys.stderr)
             await asyncio.sleep(KEYBOARD_SCAN_DELAY_S)
             continue
+
+        # Read every keyboard concurrently and funnel events through one queue,
+        # so the hotkey works on whichever keyboard the user presses it on while
+        # state (held keys, recording) stays single-consumer and race-free.
+        queue = asyncio.Queue()
+        readers = [asyncio.create_task(_pump_device(dev, queue)) for dev in devices]
 
         held = set()
         proc = None
         read_task = None
         buffer = None
         try:
-            async for event in dev.async_read_loop():
+            while True:
+                event = await queue.get()
+                if event is _RESCAN:
+                    print("keyboard disconnected; re-scanning devices", file=sys.stderr)
+                    break
                 if event.type != ecodes.EV_KEY:
                     continue
 
@@ -147,8 +187,10 @@ async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
                         text = await transcribe(proc, read_task, buffer, model, language)
                         emit(text, stdout_mode)
                         proc = read_task = buffer = None
-        except OSError as exc:
-            print(f"keyboard input error ({exc}); re-scanning devices", file=sys.stderr)
+        finally:
+            for reader in readers:
+                reader.cancel()
+            await asyncio.gather(*readers, return_exceptions=True)
             if proc is not None:
                 stop_recording(proc)
             await asyncio.sleep(KEYBOARD_RECONNECT_DELAY_S)
