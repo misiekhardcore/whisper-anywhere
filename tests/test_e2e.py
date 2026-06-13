@@ -18,6 +18,7 @@ import asyncio
 import json
 import os
 import re
+import sys
 import types
 import wave
 from difflib import SequenceMatcher
@@ -157,10 +158,14 @@ def test_install_artifacts(installed_app):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_real_e2e(installed_app, monkeypatch):
+async def test_real_e2e(monkeypatch):
     if not os.environ.get("WHISPER_E2E"):
         pytest.skip("set WHISPER_E2E=1 to run the real-model e2e")
 
+    # test_transcribe.py may have injected a mock for faster_whisper into
+    # sys.modules at collection time (if it wasn't installed yet). Pop it so
+    # the real module (which install.sh may have installed since) is found.
+    sys.modules.pop("faster_whisper", None)
     pytest.importorskip("faster_whisper")
     from whisper_anywhere.transcribe import FasterWhisperTranscriber
 

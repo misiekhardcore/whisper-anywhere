@@ -1,7 +1,7 @@
 .PHONY: test test-e2e install install-deps clean build
 
 PYTHON ?= $(shell which python3)
-PYTEST ?= PYTHONPATH="/usr/lib/python3/dist-packages:$$PYTHONPATH" $(PYTHON) -m pytest
+PYTEST ?= $(PYTHON) -m pytest
 
 test:
 	$(PYTEST) -v tests/

@@ -3,6 +3,8 @@ import os
 import subprocess
 import sys
 
+from whisper_anywhere.transcribe import DEFAULT_ENGINE
+
 CONFIG_DIR = os.path.expanduser("~/.config/whisper-anywhere")
 
 
@@ -18,7 +20,7 @@ def runtime_dir():
     return path
 
 
-def check_deps(engine="faster-whisper"):
+def check_deps(engine=DEFAULT_ENGINE):
     missing = []
     for cmd in ("parec", "ydotool"):
         if not subprocess.run(["which", cmd], capture_output=True).returncode == 0:

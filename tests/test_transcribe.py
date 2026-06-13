@@ -6,7 +6,10 @@ import pytest
 # Optional deps may not be installed; provide mock modules so patch targets resolve.
 for mod in ("faster_whisper", "funasr"):
     if mod not in sys.modules:
-        sys.modules[mod] = MagicMock()
+        try:
+            __import__(mod)
+        except ImportError:
+            sys.modules[mod] = MagicMock()
 
 from whisper_anywhere.transcribe import (
     FASTER_WHISPER_DEFAULT,
