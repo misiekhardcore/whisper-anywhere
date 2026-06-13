@@ -171,7 +171,7 @@ class TestEngineRegistry:
             def __init__(self, model_id: str):
                 self.model_id = model_id
 
-            def transcribe(self, audio_path: str, language: str | None = None) -> str:
+            def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
                 return f"dummy:{self.model_id}:{audio_path}"
 
         saved = (_ENGINES.copy(), _ENGINE_DEFAULTS.copy())
@@ -218,7 +218,7 @@ class TestTranscriberProtocol:
     def test_user_class_conforms(self):
         class GoodEngine:
             def __init__(self, model_id: str): ...
-            def transcribe(self, audio_path: str, language: str | None = None) -> str: ...
+            def transcribe(self, audio_path: str, language: Optional[str] = None) -> str: ...
         assert isinstance(GoodEngine("x"), Transcriber)
 
     def test_missing_method_does_not_conform(self):
