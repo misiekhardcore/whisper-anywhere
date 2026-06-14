@@ -12,7 +12,7 @@ requires-python = ">=3.9"
 whisper-anywhere = "whisper_anywhere.__main__:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "build"]
+dev = ["build", "pytest", "pytest-asyncio", "ruff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -21,3 +21,20 @@ markers = ["integration: real-model e2e (needs faster-whisper + model download)"
 
 [tool.setuptools.packages.find]
 include = ["whisper_anywhere*"]
+
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "W",    # pycodestyle warnings
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"

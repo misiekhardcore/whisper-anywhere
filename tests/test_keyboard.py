@@ -3,12 +3,12 @@ from unittest.mock import MagicMock, patch
 from evdev import ecodes
 
 from whisper_anywhere.keyboard import (
-    keys_held,
-    find_keyboards,
     CTRL,
-    SUPER,
     SPACE,
+    SUPER,
     WANTED_MODS,
+    find_keyboards,
+    keys_held,
 )
 
 

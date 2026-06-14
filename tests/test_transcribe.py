@@ -4,6 +4,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from whisper_anywhere import Transcriber
+from whisper_anywhere.transcribe import (
+    _ENGINE_DEFAULTS,
+    _ENGINES,
+    FasterWhisperTranscriber,
+    SenseVoiceTranscriber,
+    load_model,
+    register_engine,
+    registered_engines,
+)
+
 # Optional deps may not be installed; provide mock modules so patch targets resolve.
 for mod in ("faster_whisper", "funasr"):
     if mod not in sys.modules:
@@ -12,22 +23,11 @@ for mod in ("faster_whisper", "funasr"):
         except ImportError:
             sys.modules[mod] = MagicMock()
 
-from whisper_anywhere import Transcriber
-from whisper_anywhere.transcribe import (
-    FasterWhisperTranscriber,
-    SenseVoiceTranscriber,
-    _ENGINES,
-    _ENGINE_DEFAULTS,
-    load_model,
-    register_engine,
-    registered_engines,
-)
-
 
 class TestFasterWhisperTranscriber:
     @patch("faster_whisper.WhisperModel")
     def test_init(self, mock_whisper):
-        t = FasterWhisperTranscriber("tiny.en")
+        FasterWhisperTranscriber("tiny.en")
         mock_whisper.assert_called_once_with(
             "tiny.en", device="cpu", compute_type="int8"
         )
@@ -71,7 +71,7 @@ class TestFasterWhisperTranscriber:
 class TestSenseVoiceTranscriber:
     @patch("funasr.AutoModel")
     def test_init(self, mock_auto):
-        t = SenseVoiceTranscriber("iic/SenseVoiceSmall")
+        SenseVoiceTranscriber("iic/SenseVoiceSmall")
         mock_auto.assert_called_once_with(model="iic/SenseVoiceSmall", device="cpu")
 
     @patch("funasr.AutoModel")
@@ -233,6 +233,7 @@ class TestTranscriberProtocol:
         class GoodEngine:
             ENGINE_ID = "good"
             DEFAULT_MODEL = "good-default"
+
             def __init__(self, model_id: str): ...
             def transcribe(
                 self, audio_path: str, language: Optional[str] = None

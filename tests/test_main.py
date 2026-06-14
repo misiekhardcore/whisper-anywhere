@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,15 +8,14 @@ from evdev import ecodes
 
 import whisper_anywhere.__main__ as main_module
 from whisper_anywhere.__main__ import (
-    acquire_lock,
-    _remove_lock,
-    emit,
-    emit_partial,
-    emit_final,
     LOCK_PATH,
-    _live_vad_loop,
     _finish_recording,
-    _start_recording,
+    _live_vad_loop,
+    _remove_lock,
+    acquire_lock,
+    emit,
+    emit_final,
+    emit_partial,
 )
 
 
@@ -128,7 +126,14 @@ class TestEmitPartial:
             calls = run.call_args_list
             # 3 backspaces = 3× (keycode:1, keycode:0)
             assert calls[0].args[0] == [
-                "ydotool", "key", "14:1", "14:0", "14:1", "14:0", "14:1", "14:0"
+                "ydotool",
+                "key",
+                "14:1",
+                "14:0",
+                "14:1",
+                "14:0",
+                "14:1",
+                "14:0",
             ]
             assert calls[1].args[0] == ["ydotool", "type", "def"]
 
@@ -157,7 +162,14 @@ class TestEmitFinal:
             emit_final("abc", "done", False)
             calls = run.call_args_list
             assert calls[0].args[0] == [
-                "ydotool", "key", "14:1", "14:0", "14:1", "14:0", "14:1", "14:0"
+                "ydotool",
+                "key",
+                "14:1",
+                "14:0",
+                "14:1",
+                "14:0",
+                "14:1",
+                "14:0",
             ]
             assert calls[1].args[0] == ["ydotool", "type", "done"]
 
@@ -168,7 +180,14 @@ class TestEmitFinal:
             calls = run.call_args_list
             assert len(calls) == 1
             assert calls[0].args[0] == [
-                "ydotool", "key", "14:1", "14:0", "14:1", "14:0", "14:1", "14:0"
+                "ydotool",
+                "key",
+                "14:1",
+                "14:0",
+                "14:1",
+                "14:0",
+                "14:1",
+                "14:0",
             ]
 
     def test_ydotool_missing_warns(self, capsys):
@@ -440,7 +459,7 @@ class TestFinishRecording:
 
         with (
             patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit") as mock_emit,
+            patch.object(main_module, "emit"),
         ):
             await _finish_recording(proc, read_task, buffer, model, None, False)
 
@@ -548,7 +567,6 @@ class TestRunDaemonLiveMode:
             ]
         )
         starts = 0
-        emitted = []
 
         async def fake_start():
             nonlocal starts

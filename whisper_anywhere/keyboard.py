@@ -1,4 +1,4 @@
-from evdev import InputDevice, list_devices, ecodes
+from evdev import InputDevice, ecodes, list_devices
 
 CTRL = {ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL}
 SUPER = {ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA}

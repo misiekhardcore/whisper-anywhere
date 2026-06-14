@@ -9,17 +9,17 @@ import sys
 from evdev import ecodes
 
 from .audio import (
-    write_wav,
-    read_audio,
-    stop_recording,
     AUDIO,
-    SAMPLE_RATE,
     CHANNELS,
     PAREC_FORMAT,
     PAREC_LATENCY_MS,
+    SAMPLE_RATE,
+    read_audio,
+    stop_recording,
+    write_wav,
 )
-from .config import check_deps, load_config, parse_args, handler, runtime_dir
-from .keyboard import find_keyboards, keys_held, WANTED_MODS
+from .config import check_deps, handler, load_config, parse_args, runtime_dir
+from .keyboard import WANTED_MODS, find_keyboards, keys_held
 
 LOCK_PATH = os.path.join(runtime_dir(), "lock")
 _lock_fd = None
@@ -211,7 +211,7 @@ async def _live_vad_loop(buffer, model, language, vad, stop_event, stdout_mode):
                     write_wav(tmp, bytes(buffer[segment_start:current_pos]))
                     text = await asyncio.get_running_loop().run_in_executor(
                         None,
-                        lambda t=tmp, l=language: model.transcribe(t, language=l),
+                        lambda t=tmp, lang=language: model.transcribe(t, language=lang),
                     )
                     if text != current_partial:
                         emit_partial(current_partial, text, stdout_mode)
@@ -229,7 +229,9 @@ async def _live_vad_loop(buffer, model, language, vad, stop_event, stdout_mode):
                         write_wav(tmp, bytes(buffer[segment_start:last_speech_pos]))
                         final_text = await asyncio.get_running_loop().run_in_executor(
                             None,
-                            lambda t=tmp, l=language: model.transcribe(t, language=l),
+                            lambda t=tmp, lang=language: model.transcribe(
+                                t, language=lang
+                            ),
                         )
                         emit_final(current_partial, final_text, stdout_mode)
                         current_partial = ""
@@ -456,7 +458,7 @@ def main():
     else:
         mode_str = "combo (Ctrl+Super+Space)"
 
-    from .transcribe import load_model, DEFAULT_ENGINE
+    from .transcribe import DEFAULT_ENGINE, load_model
 
     engine = args.engine or cfg.get("engine", DEFAULT_ENGINE)
     check_deps(engine)

@@ -1,14 +1,12 @@
-import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from whisper_anywhere.vad import (
     VAD,
     FsmnVAD,
-    _parse_vad_result,
     _merge_overlapping,
-    _to_samples,
+    _parse_vad_result,
     load_vad,
 )
 
@@ -108,7 +106,7 @@ class TestFsmnVAD:
 
     @patch("funasr.AutoModel")
     def test_init_loads_model(self, mock_auto):
-        vad = FsmnVAD()
+        FsmnVAD()
         mock_auto.assert_called_once_with(model=FsmnVAD.ENGINE_ID, device="cpu")
 
     @patch("funasr.AutoModel")

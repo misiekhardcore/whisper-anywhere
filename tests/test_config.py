@@ -4,9 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from whisper_anywhere.config import load_config, parse_args, CONFIG_DIR
+from whisper_anywhere.config import CONFIG_DIR, load_config, parse_args
 
 
 class TestLoadConfig:
@@ -126,7 +124,7 @@ class TestParseArgs:
 
     def test_vad_flag(self):
         with patch.object(sys, "argv", ["whisper-anywhere", "--vad", "fsmn-vad"]):
-            assert parse_args().vad is "fsmn-vad"
+            assert parse_args().vad == "fsmn-vad"
 
 
 def test_config_dir_constant():

@@ -89,8 +89,7 @@ def load_model(
 ) -> Transcriber:
     if engine_id not in _ENGINES:
         raise ValueError(
-            f"Unknown engine: {engine_id!r}. "
-            f"Registered engines: {registered_engines()}"
+            f"Unknown engine: {engine_id!r}. Registered engines: {registered_engines()}"
         )
     cls = _ENGINES[engine_id]
     if model_id is None:

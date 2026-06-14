@@ -1,7 +1,7 @@
 from .transcribe import (
-    Transcriber,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
+    Transcriber,
     load_model,
     register_engine,
     registered_engines,
