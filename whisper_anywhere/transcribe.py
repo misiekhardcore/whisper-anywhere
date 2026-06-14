@@ -4,6 +4,12 @@ from typing import Optional, Protocol, runtime_checkable
 
 _SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
 
+SENSEVOICE_SUPPORTED_LANGUAGES: frozenset = frozenset(
+    {"auto", "zh", "en", "yue", "ja", "ko", "nospeech"}
+)
+
+_MULTILINGUAL_MODEL = "distil-large-v3"
+
 
 @runtime_checkable
 class Transcriber(Protocol):
@@ -85,13 +91,43 @@ register_engine(
 
 
 def load_engine(
-    engine_id: Optional[str] = DEFAULT_ENGINE_ID, model_id: Optional[str] = None
+    engine_id: Optional[str] = DEFAULT_ENGINE_ID,
+    model_id: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> Transcriber:
     if engine_id not in _ENGINES:
         raise ValueError(
             f"Unknown engine: {engine_id!r}. Registered engines: {registered_engines()}"
         )
     cls = _ENGINES[engine_id]
+    explicit_model = model_id is not None
     if model_id is None:
         model_id = _ENGINE_DEFAULTS.get(engine_id)
+
+    if (
+        engine_id == FasterWhisperTranscriber.ENGINE_ID
+        and language is not None
+        and language != "en"
+        and not explicit_model
+        and model_id == _ENGINE_DEFAULTS.get(engine_id)
+    ):
+        model_id = _MULTILINGUAL_MODEL
+        print(
+            f"Switching to multilingual model '{_MULTILINGUAL_MODEL}' "
+            f"for language '{language}'",
+            file=sys.stderr,
+        )
+
+    if (
+        engine_id == SenseVoiceTranscriber.ENGINE_ID
+        and language is not None
+        and language not in SENSEVOICE_SUPPORTED_LANGUAGES
+    ):
+        print(
+            f"Warning: SenseVoice does not officially support language '{language}'. "
+            f"Supported codes: {', '.join(sorted(SENSEVOICE_SUPPORTED_LANGUAGES))}. "
+            f"The language parameter will be ignored and auto-detection used instead.",
+            file=sys.stderr,
+        )
+
     return cls(model_id)

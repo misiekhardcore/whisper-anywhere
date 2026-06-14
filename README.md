@@ -4,6 +4,8 @@ Hold a hotkey, speak, release — text appears in the focused window.
 
 Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, with faster-whisper available as an alternative engine. No cloud API, no data leaves your machine.
 
+> **Language support**: SenseVoice supports explicit language codes `zh`, `en`, `yue`, `ja`, `ko` only (or `auto` for auto-detect). Other languages (e.g. Polish, German) are **not** supported with explicit codes — use the faster-whisper engine for non-English languages that aren't in SenseVoice's limited set.
+
 ## How it works
 
 1. Hold a hotkey (default: `Ctrl+Super+Space`, configurable to a single key like `F12`)
@@ -83,7 +85,9 @@ hotkey=KEY_F12
 # Model name (default: iic/SenseVoiceSmall)
 # model=iic/SenseVoiceSmall
 
-# Force a language (e.g. en, pl, de). Omit to auto-detect.
+# Force a language (e.g. zh, en, yue, ja, ko). SenseVoice supports
+# only zh, en, yue, ja, ko — other codes are ignored (auto-detected).
+# With faster-whisper, any ISO 639-1 code works.
 # language=en
 ```
 
@@ -94,7 +98,7 @@ whisper-anywhere --hotkey KEY_F12       # single-key mode
 whisper-anywhere --hotkey KEY_GRAVE     # use backtick key
 whisper-anywhere --engine faster-whisper
 whisper-anywhere --model distil-small.en
-whisper-anywhere --language en          # force language (default: auto-detect)
+whisper-anywhere --language en          # force language (SenseVoice: zh/en/yue/ja/ko; faster-whisper: any ISO 639-1)
 whisper-anywhere --stdout               # JSON lines output (for opencode plugin)
 ```
 
@@ -108,19 +112,19 @@ Downloaded automatically on first use. Default engine uses SenseVoice via [FunAS
 
 | Model | Size | Notes |
 |---|---|---|
-| `iic/SenseVoiceSmall` | ~120 MB | Default, 50+ languages, MIT license, 15-17x faster than Whisper on CPU |
+| `iic/SenseVoiceSmall` | ~120 MB | Default, MIT license, 15-17x faster than Whisper on CPU. **Explicit language codes**: zh, en, yue, ja, ko only. |
 
 ### faster-whisper (`--engine faster-whisper`)
 
-| Model | Size | Quality |
-|---|---|---|
-| `distil-large-v3` | 1.5 GB | Best |
-| `distil-medium.en` | 300 MB | Better |
-| `distil-small.en` | 94 MB | Good |
+| Model | Size | Quality | Language |
+|---|---|---|---|
+| `distil-large-v3` | 1.5 GB | Best | Multilingual (default when a non-English language is requested) |
+| `distil-medium.en` | 300 MB | Better | English only |
+| `distil-small.en` | 94 MB | Good | English only |
 
-Set via config or `--model`.
+Set via config or `--model`. When you request a non-English language without specifying a model, `distil-large-v3` is automatically selected.
 
-> **Performance**: SenseVoiceSmall is 15-17x faster than Whisper on CPU while supporting 50+ languages. faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU.
+> **Performance**: SenseVoiceSmall is 15-17x faster than Whisper on CPU (explicit codes: zh, en, yue, ja, ko). faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU.
 
 ## Project layout
 
