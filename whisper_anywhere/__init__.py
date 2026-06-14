@@ -2,7 +2,7 @@ from .transcribe import (
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
     Transcriber,
-    load_model,
+    load_engine,
     register_engine,
     registered_engines,
 )
@@ -12,7 +12,7 @@ __all__ = [
     "Transcriber",
     "FasterWhisperTranscriber",
     "SenseVoiceTranscriber",
-    "load_model",
+    "load_engine",
     "register_engine",
     "registered_engines",
     "VAD",

@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 from whisper_anywhere.transcribe import (
-    DEFAULT_ENGINE,
+    DEFAULT_ENGINE_ID,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
 )
@@ -25,7 +25,7 @@ def runtime_dir():
     return path
 
 
-def check_deps(engine=DEFAULT_ENGINE):
+def check_deps(engine_id=DEFAULT_ENGINE_ID):
     missing = []
     for cmd in ("parec", "ydotool"):
         if not subprocess.run(["which", cmd], capture_output=True).returncode == 0:
@@ -43,7 +43,7 @@ def check_deps(engine=DEFAULT_ENGINE):
             file=sys.stderr,
         )
         sys.exit(1)
-    if engine == FasterWhisperTranscriber.ENGINE_ID:
+    if engine_id == FasterWhisperTranscriber.ENGINE_ID:
         try:
             from faster_whisper import WhisperModel  # noqa: F401
         except ImportError:
@@ -52,7 +52,7 @@ def check_deps(engine=DEFAULT_ENGINE):
                 file=sys.stderr,
             )
             sys.exit(1)
-    elif engine in (SenseVoiceTranscriber.ENGINE_ID, FsmnVAD.ENGINE_ID):
+    elif engine_id in (SenseVoiceTranscriber.ENGINE_ID, FsmnVAD.ENGINE_ID):
         try:
             import funasr  # noqa: F401
         except ImportError:
@@ -104,10 +104,11 @@ def parse_args():
     )
     p.add_argument(
         "--vad",
+        nargs="?",
         default=None,
+        const=FsmnVAD.ENGINE_ID,
         metavar="ENGINE",
-        choices=(FsmnVAD.ENGINE_ID,),
-        help="VAD engine for live streaming (e.g. fsmn-vad). Enables live mode.",
+        help="VAD engine for live streaming (default: fsmn-vad). Use --vad=off to disable.",
     )
     return p.parse_args()
 
