@@ -1,5 +1,4 @@
 import sys
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -105,9 +104,10 @@ class TestFsmnVAD:
         )
 
     @patch("funasr.AutoModel")
-    def test_reset_is_noop(self, mock_auto):
+    def test_reset_reinitializes_model(self, mock_auto):
         vad = FsmnVAD()
         vad.reset()
+        assert mock_auto.call_count >= 2
 
     @patch("funasr.AutoModel")
     def test_detect_empty_audio(self, mock_auto):

@@ -1,5 +1,5 @@
 import sys
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -12,7 +12,7 @@ class VAD(Protocol):
 
 
 class FsmnVAD:
-    MODEL_ID = "iic/speech_fsmn_vad_zh-cn_16k-common-pytorch"
+    MODEL_ID = "fsmn-vad"
 
     def __init__(self):
         from funasr import AutoModel
@@ -30,7 +30,9 @@ class FsmnVAD:
         return _parse_vad_result(result)
 
     def reset(self) -> None:
-        pass
+        from funasr import AutoModel
+
+        self._model = AutoModel(model=self.MODEL_ID, device="cpu")
 
 
 def _parse_vad_result(result) -> list[tuple[int, int]]:
@@ -58,8 +60,7 @@ def _parse_vad_result(result) -> list[tuple[int, int]]:
 
 
 def _to_samples(value) -> int:
-    value = int(value)
-    return value
+    return int(value)
 
 
 def _merge_overlapping(

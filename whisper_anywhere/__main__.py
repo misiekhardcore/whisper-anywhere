@@ -73,7 +73,7 @@ async def transcribe(proc, read_task, buffer, model, language=None):
     def _run():
         return model.transcribe(AUDIO, language=language)
 
-    text = await asyncio.get_event_loop().run_in_executor(None, _run)
+    text = await asyncio.get_running_loop().run_in_executor(None, _run)
     return text
 
 
@@ -127,8 +127,12 @@ async def _live_vad_loop(
     silence_threshold = int(0.5 * sample_rate * sample_width)
     force_boundary = 15 * sample_rate * sample_width
 
+    consecutive_failures = 0
+    max_consecutive_failures = 10
+
     while not stop_event.is_set():
         try:
+            consecutive_failures = 0
             await asyncio.sleep(0.2)
 
             untranscribed = len(buffer) - last_transcribed
@@ -141,6 +145,7 @@ async def _live_vad_loop(
             if not segments:
                 continue
 
+            chunk_base = last_transcribed
             for seg_start_sample, seg_end_sample in segments:
                 seg_start = seg_start_sample * sample_width
                 seg_end = seg_end_sample * sample_width
@@ -153,8 +158,8 @@ async def _live_vad_loop(
                 )
 
                 if complete and seg_duration >= min_segment:
-                    abs_start = last_transcribed + seg_start
-                    abs_end = last_transcribed + seg_end
+                    abs_start = chunk_base + seg_start
+                    abs_end = chunk_base + seg_end
 
                     segment = bytes(buffer[abs_start:abs_end])
 
@@ -163,7 +168,7 @@ async def _live_vad_loop(
                     )
                     try:
                         write_wav(tmp, segment)
-                        text = await asyncio.get_event_loop().run_in_executor(
+                        text = await asyncio.get_running_loop().run_in_executor(
                             None,
                             lambda t=tmp, l=language: model.transcribe(t, language=l),
                         )
@@ -176,7 +181,17 @@ async def _live_vad_loop(
                         except OSError:
                             pass
         except Exception as exc:
-            print(f"VAD loop error: {exc}", file=sys.stderr)
+            consecutive_failures += 1
+            print(
+                f"VAD loop error ({consecutive_failures}/{max_consecutive_failures}): {exc}",
+                file=sys.stderr,
+            )
+            if consecutive_failures >= max_consecutive_failures:
+                print(
+                    "VAD loop: too many consecutive failures, stopping VAD loop",
+                    file=sys.stderr,
+                )
+                break
 
     return last_transcribed
 
@@ -191,7 +206,10 @@ async def _finish_recording(
     *,
     vad_task=None,
     live_mode=False,
+    stop_vad=None,
 ):
+    if live_mode and stop_vad is not None:
+        stop_vad.set()
     if live_mode and vad_task is not None:
         last_transcribed = await vad_task
     else:
@@ -208,13 +226,13 @@ async def _finish_recording(
         remaining = buffer[last_transcribed:]
         if remaining:
             write_wav(AUDIO, bytes(remaining))
-            text = await asyncio.get_event_loop().run_in_executor(
+            text = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: model.transcribe(AUDIO, language=language)
             )
             emit(text, stdout_mode)
     else:
         write_wav(AUDIO, buffer)
-        text = await asyncio.get_event_loop().run_in_executor(
+        text = await asyncio.get_running_loop().run_in_executor(
             None, lambda: model.transcribe(AUDIO, language=language)
         )
         emit(text, stdout_mode)
@@ -257,6 +275,17 @@ async def run_daemon(
     # Outer loop re-acquires keyboards whenever one disappears so the daemon
     # survives unplug/replug without user intervention.  The loop is
     # intentionally unbounded: a hotkey daemon should always recover.
+
+    def _start_vad_loop():
+        stop_vad = asyncio.Event()
+        vad.reset()
+        vad_task = asyncio.create_task(
+            _live_vad_loop(
+                buffer, model, language, emit, vad, stop_vad, stdout_mode,
+            )
+        )
+        return stop_vad, vad_task
+
     while True:
         try:
             devices = find_keyboards()
@@ -294,19 +323,7 @@ async def run_daemon(
                         if keys_held(held) and proc is None:
                             proc, read_task, buffer = await _start_recording()
                             if live_mode:
-                                stop_vad = asyncio.Event()
-                                vad.reset()
-                                vad_task = asyncio.create_task(
-                                    _live_vad_loop(
-                                        buffer,
-                                        model,
-                                        language,
-                                        emit,
-                                        vad,
-                                        stop_vad,
-                                        stdout_mode,
-                                    )
-                                )
+                                stop_vad, vad_task = _start_vad_loop()
                     elif event.value == 0:
                         held.discard(event.code)
                         if proc is not None:
@@ -319,6 +336,7 @@ async def run_daemon(
                                 stdout_mode,
                                 vad_task=vad_task,
                                 live_mode=live_mode,
+                                stop_vad=stop_vad,
                             )
                             proc = read_task = buffer = vad_task = stop_vad = None
                 else:
@@ -327,19 +345,7 @@ async def run_daemon(
                     if event.value == 1 and proc is None:
                         proc, read_task, buffer = await _start_recording()
                         if live_mode:
-                            stop_vad = asyncio.Event()
-                            vad.reset()
-                            vad_task = asyncio.create_task(
-                                _live_vad_loop(
-                                    buffer,
-                                    model,
-                                    language,
-                                    emit,
-                                    vad,
-                                    stop_vad,
-                                    stdout_mode,
-                                )
-                            )
+                            stop_vad, vad_task = _start_vad_loop()
                     elif event.value == 0 and proc is not None:
                         await _finish_recording(
                             proc,
@@ -350,6 +356,7 @@ async def run_daemon(
                             stdout_mode,
                             vad_task=vad_task,
                             live_mode=live_mode,
+                            stop_vad=stop_vad,
                         )
                         proc = read_task = buffer = vad_task = stop_vad = None
         finally:
@@ -397,7 +404,7 @@ def main():
         from .vad import load_vad
 
         vad_engine = cfg.get("vad_engine", "fsmn-vad")
-        check_deps(engine)
+        check_deps("sensevoice")
         vad = load_vad(vad_engine)
 
     language = args.language or cfg.get("language") or None
