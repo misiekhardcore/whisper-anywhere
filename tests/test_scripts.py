@@ -128,9 +128,9 @@ class TestInstallUninstall:
 
         _run(REPO_DIR / "install.sh", fake_home)
 
-        assert (
-            existing.read_text() == "hotkey=KEY_F12\n"
-        ), "existing config must not be overwritten"
+        assert existing.read_text() == "hotkey=KEY_F12\n", (
+            "existing config must not be overwritten"
+        )
 
     def test_uninstall_removes_service_and_config(self, fake_home):
         # Install first so there is something to remove
@@ -149,9 +149,9 @@ class TestInstallUninstall:
         assert result.returncode == 0, f"uninstall.sh failed:\n{result.stderr}"
 
         assert not service.exists(), "service unit should be removed"
-        assert (
-            not config_dir.exists()
-        ), "config dir should be removed when user answers y"
+        assert not config_dir.exists(), (
+            "config dir should be removed when user answers y"
+        )
 
     def test_uninstall_keeps_config_when_declined(self, fake_home):
         _run(REPO_DIR / "install.sh", fake_home)

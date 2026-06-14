@@ -36,7 +36,7 @@ def check_deps(engine=DEFAULT_ENGINE):
         print("  bash install.sh", file=sys.stderr)
         sys.exit(1)
     try:
-        from evdev import InputDevice
+        from evdev import InputDevice  # noqa: F401
     except ImportError:
         print(
             "Missing python3-evdev. Run: pkexec apt install python3-evdev",
@@ -45,7 +45,7 @@ def check_deps(engine=DEFAULT_ENGINE):
         sys.exit(1)
     if engine == FasterWhisperTranscriber.ENGINE_ID:
         try:
-            from faster_whisper import WhisperModel
+            from faster_whisper import WhisperModel  # noqa: F401
         except ImportError:
             print(
                 "Missing faster-whisper. Run: pip3 install --user faster-whisper",
