@@ -28,7 +28,6 @@ import pytest
 from evdev import ecodes
 
 import whisper_anywhere.daemon as daemon
-import whisper_anywhere.keyboard as keyboard
 import whisper_anywhere.recording as recording
 from whisper_anywhere.output import emit, emit_final
 
@@ -107,7 +106,9 @@ async def drive_dictation(model, pcm, monkeypatch, timeout=30):
 
     monkeypatch.setattr(recording, "emit", capturing_emit)
 
-    task = asyncio.create_task(daemon.run_daemon(ecodes.KEY_F12, model, stdout_mode=True))
+    task = asyncio.create_task(
+        daemon.run_daemon(ecodes.KEY_F12, model, stdout_mode=True)
+    )
     try:
         return await asyncio.wait_for(done, timeout)
     finally:

@@ -7,9 +7,7 @@ import pytest
 from evdev import ecodes
 
 import whisper_anywhere.daemon as daemon_module
-import whisper_anywhere.keyboard as keyboard_module
 import whisper_anywhere.recording as recording_module
-from whisper_anywhere.audio import stop_recording, write_wav
 from whisper_anywhere.lock import LOCK_PATH, _remove_lock, acquire_lock
 from whisper_anywhere.output import (
     _common_prefix_len,
