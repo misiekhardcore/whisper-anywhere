@@ -309,6 +309,8 @@ async def _finish_recording(
         text = await asyncio.get_running_loop().run_in_executor(
             None, lambda: model.transcribe(AUDIO, language=language)
         )
+        if not any(c.isalpha() for c in text):
+            return
         emit_final(current_partial, text, stdout_mode)
     else:
         write_wav(AUDIO, buffer)
