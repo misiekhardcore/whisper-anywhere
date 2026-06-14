@@ -26,154 +26,158 @@ for mod in ("faster_whisper", "funasr"):
 
 class TestFasterWhisperTranscriber:
     @patch("faster_whisper.WhisperModel")
-    def test_init(self, mock_whisper):
+    def test_init(self, mock_whisper: MagicMock) -> None:
         FasterWhisperTranscriber("tiny.en")
         mock_whisper.assert_called_once_with(
             "tiny.en", device="cpu", compute_type="int8"
         )
 
     @patch("faster_whisper.WhisperModel")
-    def test_transcribe_returns_text(self, mock_whisper):
-        seg = MagicMock()
+    def test_transcribe_returns_text(self, mock_whisper: MagicMock) -> None:
+        seg: MagicMock = MagicMock()
         seg.text = "hello world"
         mock_whisper.return_value.transcribe.return_value = ([seg], None)
 
-        t = FasterWhisperTranscriber("tiny.en")
-        result = t.transcribe("/tmp/t.wav")
+        t: FasterWhisperTranscriber = FasterWhisperTranscriber("tiny.en")
+        result: str = t.transcribe("/tmp/t.wav")
         assert result == "hello world"
         mock_whisper.return_value.transcribe.assert_called_once_with(
             "/tmp/t.wav", beam_size=5, language=None
         )
 
     @patch("faster_whisper.WhisperModel")
-    def test_transcribe_with_language(self, mock_whisper):
-        seg = MagicMock()
+    def test_transcribe_with_language(self, mock_whisper: MagicMock) -> None:
+        seg: MagicMock = MagicMock()
         seg.text = "cześć"
         mock_whisper.return_value.transcribe.return_value = ([seg], None)
 
-        t = FasterWhisperTranscriber("tiny.en")
-        result = t.transcribe("/tmp/t.wav", language="pl")
+        t: FasterWhisperTranscriber = FasterWhisperTranscriber("tiny.en")
+        result: str = t.transcribe("/tmp/t.wav", language="pl")
         assert result == "cześć"
         mock_whisper.return_value.transcribe.assert_called_once_with(
             "/tmp/t.wav", beam_size=5, language="pl"
         )
 
     @patch("faster_whisper.WhisperModel")
-    def test_transcribe_concatenates_multiple_segments(self, mock_whisper):
-        segs = [MagicMock(text="hello"), MagicMock(text="world")]
+    def test_transcribe_concatenates_multiple_segments(
+        self, mock_whisper: MagicMock
+    ) -> None:
+        segs: list[MagicMock] = [MagicMock(text="hello"), MagicMock(text="world")]
         mock_whisper.return_value.transcribe.return_value = (segs, None)
 
-        t = FasterWhisperTranscriber("tiny.en")
-        result = t.transcribe("/tmp/t.wav")
+        t: FasterWhisperTranscriber = FasterWhisperTranscriber("tiny.en")
+        result: str = t.transcribe("/tmp/t.wav")
         assert result == "hello world"
 
 
 class TestSenseVoiceTranscriber:
     @patch("funasr.AutoModel")
-    def test_init(self, mock_auto):
+    def test_init(self, mock_auto: MagicMock) -> None:
         SenseVoiceTranscriber("iic/SenseVoiceSmall")
         mock_auto.assert_called_once_with(model="iic/SenseVoiceSmall", device="cpu")
 
     @patch("funasr.AutoModel")
-    def test_transcribe_returns_text(self, mock_auto):
+    def test_transcribe_returns_text(self, mock_auto: MagicMock) -> None:
         mock_auto.return_value.generate.return_value = [{"text": "hello world"}]
 
-        t = SenseVoiceTranscriber("iic/SenseVoiceSmall")
-        result = t.transcribe("/tmp/t.wav")
+        t: SenseVoiceTranscriber = SenseVoiceTranscriber("iic/SenseVoiceSmall")
+        result: str = t.transcribe("/tmp/t.wav")
         assert result == "hello world"
         mock_auto.return_value.generate.assert_called_once_with(
             input="/tmp/t.wav", use_itn=True
         )
 
     @patch("funasr.AutoModel")
-    def test_transcribe_with_language(self, mock_auto):
+    def test_transcribe_with_language(self, mock_auto: MagicMock) -> None:
         mock_auto.return_value.generate.return_value = [{"text": "witaj świecie"}]
 
-        t = SenseVoiceTranscriber("iic/SenseVoiceSmall")
-        result = t.transcribe("/tmp/t.wav", language="pl")
+        t: SenseVoiceTranscriber = SenseVoiceTranscriber("iic/SenseVoiceSmall")
+        result: str = t.transcribe("/tmp/t.wav", language="pl")
         assert result == "witaj świecie"
         mock_auto.return_value.generate.assert_called_once_with(
             input="/tmp/t.wav", use_itn=True, language="pl"
         )
 
     @patch("funasr.AutoModel")
-    def test_transcribe_empty_result(self, mock_auto):
+    def test_transcribe_empty_result(self, mock_auto: MagicMock) -> None:
         mock_auto.return_value.generate.return_value = []
 
-        t = SenseVoiceTranscriber("iic/SenseVoiceSmall")
-        result = t.transcribe("/tmp/t.wav")
+        t: SenseVoiceTranscriber = SenseVoiceTranscriber("iic/SenseVoiceSmall")
+        result: str = t.transcribe("/tmp/t.wav")
         assert result == ""
 
     @patch("funasr.AutoModel")
-    def test_transcribe_missing_text_key(self, mock_auto):
+    def test_transcribe_missing_text_key(self, mock_auto: MagicMock) -> None:
         mock_auto.return_value.generate.return_value = [{"key": "test"}]
 
-        t = SenseVoiceTranscriber("iic/SenseVoiceSmall")
-        result = t.transcribe("/tmp/t.wav")
+        t: SenseVoiceTranscriber = SenseVoiceTranscriber("iic/SenseVoiceSmall")
+        result: str = t.transcribe("/tmp/t.wav")
         assert result == ""
 
     @patch("funasr.AutoModel")
-    def test_strips_sensevoice_tags(self, mock_auto):
+    def test_strips_sensevoice_tags(self, mock_auto: MagicMock) -> None:
         mock_auto.return_value.generate.return_value = [
             {"text": "<|en|><|EMO_UNKNOWN|><|Speech|>this is a test recording"}
         ]
 
-        t = SenseVoiceTranscriber("iic/SenseVoiceSmall")
-        result = t.transcribe("/tmp/t.wav")
+        t: SenseVoiceTranscriber = SenseVoiceTranscriber("iic/SenseVoiceSmall")
+        result: str = t.transcribe("/tmp/t.wav")
         assert result == "this is a test recording"
 
 
 class TestLoadModel:
     @patch("faster_whisper.WhisperModel")
-    def test_faster_whisper_default_model(self, mock_whisper):
-        t = load_engine("faster-whisper")
+    def test_faster_whisper_default_model(self, mock_whisper: MagicMock) -> None:
+        t: Transcriber = load_engine("faster-whisper")
         assert isinstance(t, FasterWhisperTranscriber)
         mock_whisper.assert_called_once_with(
-            FasterWhisperTranscriber.DEFAULT_MODEL_ID, device="cpu", compute_type="int8"
+            FasterWhisperTranscriber.DEFAULT_MODEL_ID,
+            device="cpu",
+            compute_type="int8",
         )
 
     @patch("faster_whisper.WhisperModel")
-    def test_faster_whisper_custom_model(self, mock_whisper):
-        t = load_engine("faster-whisper", "tiny.en")
+    def test_faster_whisper_custom_model(self, mock_whisper: MagicMock) -> None:
+        t: Transcriber = load_engine("faster-whisper", "tiny.en")
         assert isinstance(t, FasterWhisperTranscriber)
         mock_whisper.assert_called_once_with(
             "tiny.en", device="cpu", compute_type="int8"
         )
 
     @patch("funasr.AutoModel")
-    def test_sensevoice_default_model(self, mock_auto):
-        t = load_engine("sensevoice")
+    def test_sensevoice_default_model(self, mock_auto: MagicMock) -> None:
+        t: Transcriber = load_engine("sensevoice")
         assert isinstance(t, SenseVoiceTranscriber)
         mock_auto.assert_called_once_with(
             model=SenseVoiceTranscriber.DEFAULT_MODEL_ID, device="cpu"
         )
 
     @patch("funasr.AutoModel")
-    def test_sensevoice_custom_model(self, mock_auto):
-        t = load_engine("sensevoice", "iic/SenseVoiceSmall")
+    def test_sensevoice_custom_model(self, mock_auto: MagicMock) -> None:
+        t: Transcriber = load_engine("sensevoice", "iic/SenseVoiceSmall")
         assert isinstance(t, SenseVoiceTranscriber)
         mock_auto.assert_called_once_with(model="iic/SenseVoiceSmall", device="cpu")
 
-    def test_default_engine_is_sensevoice(self):
-        t = load_engine()
+    def test_default_engine_is_sensevoice(self) -> None:
+        t: Transcriber = load_engine()
         assert isinstance(t, SenseVoiceTranscriber)
 
-    def test_invalid_engine_raises(self):
+    def test_invalid_engine_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown engine.*sensevoice"):
             load_engine("invalid")
 
 
 class TestEngineRegistry:
-    def test_registered_engines_includes_builtins(self):
-        engines = registered_engines()
+    def test_registered_engines_includes_builtins(self) -> None:
+        engines: list[str] = registered_engines()
         assert "faster-whisper" in engines
         assert "sensevoice" in engines
 
-    def test_register_and_dispatch(self):
+    def test_register_and_dispatch(self) -> None:
         class _DummyEngine:
-            ENGINE_ID = "dummy"
+            ENGINE_ID: str = "dummy"
 
-            def __init__(self, model_id: str):
+            def __init__(self, model_id: str) -> None:
                 self.model_id = model_id
 
             def transcribe(
@@ -181,17 +185,20 @@ class TestEngineRegistry:
             ) -> str:
                 return f"dummy:{self.model_id}:{audio_path}"
 
-        saved = (_ENGINES.copy(), _ENGINE_DEFAULTS.copy())
+        saved: tuple[dict[str, Transcriber], dict[str, str]] = (
+            _ENGINES.copy(),
+            _ENGINE_DEFAULTS.copy(),
+        )
         try:
             register_engine(_DummyEngine, default_model="dummy-default")
             assert "dummy" in registered_engines()
 
-            t = load_engine("dummy")
+            t: Transcriber = load_engine("dummy")
             assert isinstance(t, _DummyEngine)
             assert t.model_id == "dummy-default"
             assert t.transcribe("/tmp/t.wav") == "dummy:dummy-default:/tmp/t.wav"
 
-            t2 = load_engine("dummy", "custom-model")
+            t2: Transcriber = load_engine("dummy", "custom-model")
             assert t2.model_id == "custom-model"
         finally:
             _ENGINES.clear()
@@ -199,8 +206,11 @@ class TestEngineRegistry:
             _ENGINE_DEFAULTS.clear()
             _ENGINE_DEFAULTS.update(saved[1])
 
-    def test_register_without_default(self):
-        saved = (_ENGINES.copy(), _ENGINE_DEFAULTS.copy())
+    def test_register_without_default(self) -> None:
+        saved: tuple[dict[str, Transcriber], dict[str, str]] = (
+            _ENGINES.copy(),
+            _ENGINE_DEFAULTS.copy(),
+        )
         try:
             register_engine(
                 type(
@@ -213,7 +223,7 @@ class TestEngineRegistry:
                     },
                 ),
             )
-            t = load_engine("no-default", "explicit-model")
+            t: Transcriber = load_engine("no-default", "explicit-model")
             assert t.model_id == "explicit-model"
         finally:
             _ENGINES.clear()
@@ -223,34 +233,34 @@ class TestEngineRegistry:
 
 
 class TestTranscriberProtocol:
-    def test_faster_whisper_conforms(self):
+    def test_faster_whisper_conforms(self) -> None:
         assert isinstance(FasterWhisperTranscriber("tiny.en"), Transcriber)
 
-    def test_sensevoice_conforms(self):
+    def test_sensevoice_conforms(self) -> None:
         assert isinstance(SenseVoiceTranscriber("iic/SenseVoiceSmall"), Transcriber)
 
-    def test_user_class_conforms(self):
+    def test_user_class_conforms(self) -> None:
         class GoodEngine:
-            ENGINE_ID = "good"
-            DEFAULT_MODEL_ID = "good-default"
+            ENGINE_ID: str = "good"
+            DEFAULT_MODEL_ID: str = "good-default"
 
-            def __init__(self, model_id: str): ...
+            def __init__(self, model_id: str) -> None: ...
             def transcribe(
                 self, audio_path: str, language: Optional[str] = None
             ) -> str: ...
 
         assert isinstance(GoodEngine("x"), Transcriber)
 
-    def test_missing_method_does_not_conform(self):
+    def test_missing_method_does_not_conform(self) -> None:
         class BadEngine:
-            def __init__(self, model_id: str): ...
+            def __init__(self, model_id: str) -> None: ...
 
         assert not isinstance(BadEngine("x"), Transcriber)
 
 
 class TestConstants:
-    def test_faster_whisper_default(self):
+    def test_faster_whisper_default(self) -> None:
         assert FasterWhisperTranscriber.DEFAULT_MODEL_ID == "distil-medium.en"
 
-    def test_sensevoice_default(self):
+    def test_sensevoice_default(self) -> None:
         assert SenseVoiceTranscriber.DEFAULT_MODEL_ID == "iic/SenseVoiceSmall"

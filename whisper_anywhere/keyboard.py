@@ -1,12 +1,12 @@
 from evdev import InputDevice, ecodes, list_devices
 
-CTRL = {ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL}
-SUPER = {ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA}
-SPACE = {ecodes.KEY_SPACE}
-WANTED_MODS = CTRL | SUPER | SPACE
+CTRL: set[int] = {ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL}
+SUPER: set[int] = {ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA}
+SPACE: set[int] = {ecodes.KEY_SPACE}
+WANTED_MODS: set[int] = CTRL | SUPER | SPACE
 
 
-def find_keyboards():
+def find_keyboards() -> list[InputDevice]:
     """Return every physical keyboard, so the daemon can listen on all of them.
 
     Picking a single device is unreliable when more than one keyboard is
@@ -14,8 +14,8 @@ def find_keyboards():
     user could press the hotkey on any of them. We therefore return all real
     keyboards and let the caller read every device concurrently.
     """
-    skip = {"ydotool", "lid", "power", "sleep", "video"}
-    keyboards = []
+    skip: set[str] = {"ydotool", "lid", "power", "sleep", "video"}
+    keyboards: list[InputDevice] = []
     for path in list_devices():
         try:
             dev = InputDevice(path)
@@ -47,5 +47,5 @@ def find_keyboards():
     return keyboards
 
 
-def keys_held(held):
+def keys_held(held: set[int]) -> bool:
     return bool(held & CTRL) and bool(held & SUPER) and bool(held & SPACE)

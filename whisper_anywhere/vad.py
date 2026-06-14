@@ -31,7 +31,7 @@ class FsmnVAD:
         pass  # FSMN-VAD is stateless between recordings
 
 
-def _parse_vad_result(result) -> list[tuple[int, int]]:
+def _parse_vad_result(result: object) -> list[tuple[int, int]]:
     segments: list[tuple[int, int]] = []
 
     if isinstance(result, dict):
