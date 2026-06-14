@@ -1,38 +1,35 @@
 import atexit
 import os
 import sys
+from typing import Optional
 
 from .config import runtime_dir
 
 LOCK_PATH = os.path.join(runtime_dir(), "lock")
-_lock_fd = None
 
 
-def acquire_lock():
-    global _lock_fd
-    try:
-        import fcntl
-    except ImportError:
-        return
-    _lock_fd = open(LOCK_PATH, "w")
-    try:
-        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        print("Another instance is already running.", file=sys.stderr)
-        sys.exit(1)
-    atexit.register(_remove_lock)
+class Lock:
+    def __init__(self) -> None:
+        self._fd: Optional[int] = None
 
+    def acquire(self) -> None:
+        try:
+            import fcntl
+        except ImportError:
+            return
+        self._fd = open(LOCK_PATH, "w")
+        try:
+            fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            print("Another instance is already running.", file=sys.stderr)
+            sys.exit(1)
+        atexit.register(self.release)
 
-def _remove_lock():
-    global _lock_fd
-    if _lock_fd is None:
-        return
-    # Close the fd to release the flock, but leave the file in place. Unlinking
-    # it would break exclusion during restart races: flock is keyed on the
-    # inode, so a process that re-creates the path gets a fresh inode and locks
-    # it independently, letting two daemons run at once.
-    try:
-        _lock_fd.close()
-    except OSError:
-        pass
-    _lock_fd = None
+    def release(self) -> None:
+        if self._fd is None:
+            return
+        try:
+            self._fd.close()
+        except OSError:
+            pass
+        self._fd = None

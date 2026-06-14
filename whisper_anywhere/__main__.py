@@ -7,8 +7,9 @@ from typing import Optional
 from evdev import ecodes
 
 from .config import check_deps, handler, load_config, parse_args
-from .daemon import run_daemon
-from .lock import acquire_lock
+from .daemon import Daemon
+from .lock import Lock
+from .output import TextOutput
 from .transcribe import Transcriber
 from .vad import VAD
 
@@ -47,7 +48,7 @@ def main():
     signal.signal(signal.SIGINT, handler)
     signal.signal(signal.SIGTERM, handler)
 
-    acquire_lock()
+    Lock().acquire()
 
     args = parse_args()
     cfg = load_config()
@@ -56,24 +57,18 @@ def main():
     hotkey_code = load_hotkey(cfg, args)
     engine = load_engine(cfg, args)
     vad = load_vad(cfg, args)
-
     language = args.language or cfg.get("language")
-    lang_str = language or "auto-detect"
 
+    output = TextOutput(stdout_mode)
+    daemon = Daemon(hotkey_code, engine, output, language, vad)
+
+    lang_str = language or "auto-detect"
     print(
         f"whisper-anywhere ready — engine: {engine.ENGINE_ID}, hotkey: {f'single-key ({hotkey_code})' if hotkey_code is not None else 'combo (Ctrl+Super+Space)'}, language: {lang_str}{f', live ({vad.ENGINE_ID})' if vad else ''}, stdout: {stdout_mode}",
         file=sys.stderr,
     )
 
-    asyncio.run(
-        run_daemon(
-            hotkey_code,
-            engine,
-            stdout_mode,
-            language,
-            vad,
-        )
-    )
+    asyncio.run(daemon.run())
 
 
 if __name__ == "__main__":

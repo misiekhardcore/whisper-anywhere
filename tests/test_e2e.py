@@ -1,19 +1,3 @@
-"""End-to-end dictation pipeline test.
-
-Drives the real daemon loop (``run_daemon``) in single-key mode with a fake
-keyboard and a pre-recorded audio source piped through a real subprocess, then
-asserts the text it would type. Output is checked via ``--stdout`` JSON mode so
-no ``ydotool`` is involved.
-
-Two tests:
-- ``test_stub_e2e`` — fast/deterministic, runs everywhere. A stub model returns
-  a known transcript; this validates the press -> record -> write -> transcribe
-  -> emit wiring end to end.
-- ``test_real_e2e`` — gated on ``WHISPER_E2E=1`` and ``@pytest.mark.integration``;
-  loads a real ``tiny.en`` model and transcribes a committed CC0 clip, asserting
-  a tolerant match against its known transcript.
-"""
-
 import asyncio
 import json
 import os
@@ -28,23 +12,18 @@ import pytest
 from evdev import ecodes
 
 import whisper_anywhere.daemon as daemon
-import whisper_anywhere.recording as recording
-from whisper_anywhere.output import emit, emit_final
+from whisper_anywhere.daemon import Daemon
+from whisper_anywhere.output import TextOutput
+from whisper_anywhere.recording import Recorder
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-# --------------------------------------------------------------------------- #
-# Harness
-# --------------------------------------------------------------------------- #
 def fake_key_event(code, value):
     return types.SimpleNamespace(type=ecodes.EV_KEY, code=code, value=value)
 
 
 class FakeKeyboard:
-    """Stand-in for an evdev device. ``async_read_loop`` is an async generator
-    (matching ``async for event in dev.async_read_loop()``)."""
-
     def __init__(self, events):
         self._events = events
 
@@ -52,8 +31,6 @@ class FakeKeyboard:
         for ev in self._events:
             yield ev
             await asyncio.sleep(0)
-        # Keep the loop alive so run_daemon's outer `while True` doesn't re-scan;
-        # the driving task is cancelled once the transcript has been emitted.
         await asyncio.sleep(3600)
 
 
@@ -66,13 +43,9 @@ def pcm_from_wav(path):
 
 
 class _FakeRecorder:
-    """Stand-in for the parec subprocess. The 'microphone' is the pre-recorded
-    PCM, pre-loaded into the capture buffer, so the result is deterministic and
-    not racing the SIGINT that stop_recording() sends on release."""
-
     returncode = 0
 
-    def send_signal(self, _sig):  # what stop_recording() calls
+    def send_signal(self, _sig):
         pass
 
     async def wait(self):
@@ -80,35 +53,34 @@ class _FakeRecorder:
 
 
 async def drive_dictation(model, pcm, monkeypatch, timeout=30):
-    """Simulate one F12 press/release with ``pcm`` as the recorded mic input and
-    return the emitted text."""
     events = [
-        fake_key_event(ecodes.KEY_F12, 1),  # press
-        fake_key_event(ecodes.KEY_F12, 0),  # release
+        fake_key_event(ecodes.KEY_F12, 1),
+        fake_key_event(ecodes.KEY_F12, 0),
     ]
     monkeypatch.setattr(daemon, "find_keyboards", lambda: [FakeKeyboard(events)])
 
-    async def fake_start_recording():
-        buffer = bytearray(pcm)  # mic input = pre-recorded audio
+    async def fake_start():
+        buffer = bytearray(pcm)
         read_task = asyncio.create_task(asyncio.sleep(0))
         return _FakeRecorder(), read_task, buffer
 
-    monkeypatch.setattr(daemon, "_start_recording", fake_start_recording)
+    monkeypatch.setattr(Recorder, "start", fake_start)
 
     loop = asyncio.get_running_loop()
     done = loop.create_future()
-    original_emit = emit
 
-    def capturing_emit(text, stdout_mode):
-        original_emit(text, stdout_mode)  # keep real stdout JSON behaviour
+    output = TextOutput(True)
+    original_emit = output.emit
+
+    def capturing_emit(text):
+        original_emit(text)
         if not done.done():
             done.set_result(text)
 
-    monkeypatch.setattr(recording, "emit", capturing_emit)
+    output.emit = capturing_emit
 
-    task = asyncio.create_task(
-        daemon.run_daemon(ecodes.KEY_F12, model, stdout_mode=True)
-    )
+    daemon_instance = Daemon(ecodes.KEY_F12, model, output, None, None)
+    task = asyncio.create_task(daemon_instance.run())
     try:
         return await asyncio.wait_for(done, timeout)
     finally:
@@ -123,9 +95,6 @@ def _normalize(text):
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", text.lower())).strip()
 
 
-# --------------------------------------------------------------------------- #
-# Stub e2e (default suite)
-# --------------------------------------------------------------------------- #
 class StubModel:
     def __init__(self, text):
         self._text = text
@@ -143,34 +112,34 @@ class StubVAD:
 
 
 async def drive_dictation_live(model, pcm, vad, monkeypatch, timeout=30):
-    """Like drive_dictation but with live VAD enabled. Captures emit_final."""
     events = [
         fake_key_event(ecodes.KEY_F12, 1),
         fake_key_event(ecodes.KEY_F12, 0),
     ]
     monkeypatch.setattr(daemon, "find_keyboards", lambda: [FakeKeyboard(events)])
 
-    async def fake_start_recording():
+    async def fake_start():
         buffer = bytearray(pcm)
         read_task = asyncio.create_task(asyncio.sleep(0))
         return _FakeRecorder(), read_task, buffer
 
-    monkeypatch.setattr(daemon, "_start_recording", fake_start_recording)
+    monkeypatch.setattr(Recorder, "start", fake_start)
 
     loop = asyncio.get_running_loop()
     done = loop.create_future()
-    original_emit_final = emit_final
 
-    def capturing_emit_final(prev_text, final_text, stdout_mode):
-        original_emit_final(prev_text, final_text, stdout_mode)
+    output = TextOutput(True)
+    original_emit_final = output.emit_final
+
+    def capturing_emit_final(prev_text, final_text):
+        original_emit_final(prev_text, final_text)
         if not done.done() and final_text:
             done.set_result(final_text)
 
-    monkeypatch.setattr(recording, "emit_final", capturing_emit_final)
+    output.emit_final = capturing_emit_final
 
-    task = asyncio.create_task(
-        daemon.run_daemon(ecodes.KEY_F12, model, stdout_mode=True, vad=vad)
-    )
+    daemon_instance = Daemon(ecodes.KEY_F12, model, output, None, vad)
+    task = asyncio.create_task(daemon_instance.run())
     try:
         return await asyncio.wait_for(done, timeout)
     finally:
@@ -183,33 +152,28 @@ async def drive_dictation_live(model, pcm, vad, monkeypatch, timeout=30):
 
 @pytest.mark.asyncio
 async def test_stub_e2e(monkeypatch, capsys):
-    pcm = b"\x00\x01" * 8000  # ~0.5s of 16 kHz mono s16le
+    pcm = b"\x00\x01" * 8000
 
     text = await drive_dictation(StubModel("hello world"), pcm, monkeypatch)
 
     assert text == "hello world"
-    # --stdout mode emitted exactly the JSON line the daemon would print.
     out = capsys.readouterr().out.strip().splitlines()[-1]
     assert json.loads(out) == {"text": "hello world"}
 
 
 @pytest.mark.asyncio
 async def test_stub_e2e_live_vad(monkeypatch, capsys):
-    pcm = b"\x00\x01" * 8000  # ~0.5s of 16 kHz mono s16le
+    pcm = b"\x00\x01" * 8000
 
     text = await drive_dictation_live(
         StubModel("hello world"), pcm, StubVAD(), monkeypatch
     )
 
     assert text == "hello world"
-    # Live mode emits {"type": "final", ...} instead of {"text": ...}.
     out = capsys.readouterr().out.strip().splitlines()[-1]
     assert json.loads(out) == {"type": "final", "text": "hello world"}
 
 
-# --------------------------------------------------------------------------- #
-# Real e2e with live VAD (gated)
-# --------------------------------------------------------------------------- #
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_real_e2e_live_vad(monkeypatch):
@@ -252,13 +216,8 @@ async def test_real_e2e_live_vad(monkeypatch):
     )
 
 
-# --------------------------------------------------------------------------- #
-# Real e2e (gated)
-# --------------------------------------------------------------------------- #
 @pytest.mark.integration
 def test_install_artifacts(installed_app):
-    """install.sh (run by the installed_app fixture) created the expected
-    artifacts; uninstall.sh removal is asserted in the fixture teardown."""
     if installed_app is None:
         pytest.skip("set WHISPER_E2E_INSTALL=1 to exercise install.sh/uninstall.sh")
     assert installed_app.bin.exists()
@@ -272,9 +231,6 @@ async def test_real_e2e(monkeypatch):
     if not os.environ.get("WHISPER_E2E"):
         pytest.skip("set WHISPER_E2E=1 to run the real-model e2e")
 
-    # test_transcribe.py may have injected a mock for faster_whisper into
-    # sys.modules at collection time (if it wasn't installed yet). Pop it so
-    # the real module (which install.sh may have installed since) is found.
     sys.modules.pop("faster_whisper", None)
     pytest.importorskip("faster_whisper")
     from whisper_anywhere.transcribe import FasterWhisperTranscriber
@@ -287,7 +243,7 @@ async def test_real_e2e(monkeypatch):
 
     try:
         model = FasterWhisperTranscriber("tiny.en")
-    except Exception as exc:  # offline / download failure
+    except Exception as exc:
         pytest.skip(f"tiny.en model unavailable: {exc}")
 
     text = await drive_dictation(
