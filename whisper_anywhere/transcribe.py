@@ -10,7 +10,7 @@ class Transcriber(Protocol):
     """Interface every transcription engine must implement."""
 
     ENGINE_ID: str
-    DEFAULT_MODEL: str
+    DEFAULT_MODEL_ID: str
 
     def __init__(self, model_id: str) -> None: ...
 
@@ -19,9 +19,9 @@ class Transcriber(Protocol):
 
 class FasterWhisperTranscriber:
     ENGINE_ID = "faster-whisper"
-    DEFAULT_MODEL = "distil-medium.en"
+    DEFAULT_MODEL_ID = "distil-medium.en"
 
-    def __init__(self, model_id: str = DEFAULT_MODEL):
+    def __init__(self, model_id: str = DEFAULT_MODEL_ID):
         from faster_whisper import WhisperModel
 
         print(f"Loading faster-whisper model '{model_id}'...", file=sys.stderr)
@@ -34,9 +34,9 @@ class FasterWhisperTranscriber:
 
 class SenseVoiceTranscriber:
     ENGINE_ID = "sensevoice"
-    DEFAULT_MODEL = "iic/SenseVoiceSmall"
+    DEFAULT_MODEL_ID = "iic/SenseVoiceSmall"
 
-    def __init__(self, model_id: str = DEFAULT_MODEL):
+    def __init__(self, model_id: str = DEFAULT_MODEL_ID):
         from funasr import AutoModel
 
         print(f"Loading SenseVoice model '{model_id}'...", file=sys.stderr)
@@ -54,7 +54,7 @@ class SenseVoiceTranscriber:
         return _SENSEVOICE_TAG_RE.sub("", text).strip()
 
 
-DEFAULT_ENGINE = SenseVoiceTranscriber.ENGINE_ID
+DEFAULT_ENGINE_ID = SenseVoiceTranscriber.ENGINE_ID
 _ENGINES: dict[str, type[Transcriber]] = {}
 _ENGINE_DEFAULTS: dict[str, str] = {}
 
@@ -66,7 +66,7 @@ def register_engine(
     resolved = (
         default_model
         if default_model is not None
-        else getattr(cls, "DEFAULT_MODEL", None)
+        else getattr(cls, "DEFAULT_MODEL_ID", None)
     )
     if resolved is not None:
         _ENGINE_DEFAULTS[cls.ENGINE_ID] = resolved
@@ -84,8 +84,8 @@ register_engine(
 )
 
 
-def load_model(
-    engine_id: Optional[str] = DEFAULT_ENGINE, model_id: Optional[str] = None
+def load_engine(
+    engine_id: Optional[str] = DEFAULT_ENGINE_ID, model_id: Optional[str] = None
 ) -> Transcriber:
     if engine_id not in _ENGINES:
         raise ValueError(

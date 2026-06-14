@@ -10,7 +10,7 @@ from whisper_anywhere.transcribe import (
     _ENGINES,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
-    load_model,
+    load_engine,
     register_engine,
     registered_engines,
 )
@@ -126,15 +126,15 @@ class TestSenseVoiceTranscriber:
 class TestLoadModel:
     @patch("faster_whisper.WhisperModel")
     def test_faster_whisper_default_model(self, mock_whisper):
-        t = load_model("faster-whisper")
+        t = load_engine("faster-whisper")
         assert isinstance(t, FasterWhisperTranscriber)
         mock_whisper.assert_called_once_with(
-            FasterWhisperTranscriber.DEFAULT_MODEL, device="cpu", compute_type="int8"
+            FasterWhisperTranscriber.DEFAULT_MODEL_ID, device="cpu", compute_type="int8"
         )
 
     @patch("faster_whisper.WhisperModel")
     def test_faster_whisper_custom_model(self, mock_whisper):
-        t = load_model("faster-whisper", "tiny.en")
+        t = load_engine("faster-whisper", "tiny.en")
         assert isinstance(t, FasterWhisperTranscriber)
         mock_whisper.assert_called_once_with(
             "tiny.en", device="cpu", compute_type="int8"
@@ -142,25 +142,25 @@ class TestLoadModel:
 
     @patch("funasr.AutoModel")
     def test_sensevoice_default_model(self, mock_auto):
-        t = load_model("sensevoice")
+        t = load_engine("sensevoice")
         assert isinstance(t, SenseVoiceTranscriber)
         mock_auto.assert_called_once_with(
-            model=SenseVoiceTranscriber.DEFAULT_MODEL, device="cpu"
+            model=SenseVoiceTranscriber.DEFAULT_MODEL_ID, device="cpu"
         )
 
     @patch("funasr.AutoModel")
     def test_sensevoice_custom_model(self, mock_auto):
-        t = load_model("sensevoice", "iic/SenseVoiceSmall")
+        t = load_engine("sensevoice", "iic/SenseVoiceSmall")
         assert isinstance(t, SenseVoiceTranscriber)
         mock_auto.assert_called_once_with(model="iic/SenseVoiceSmall", device="cpu")
 
     def test_default_engine_is_sensevoice(self):
-        t = load_model()
+        t = load_engine()
         assert isinstance(t, SenseVoiceTranscriber)
 
     def test_invalid_engine_raises(self):
         with pytest.raises(ValueError, match="Unknown engine.*sensevoice"):
-            load_model("invalid")
+            load_engine("invalid")
 
 
 class TestEngineRegistry:
@@ -186,12 +186,12 @@ class TestEngineRegistry:
             register_engine(_DummyEngine, default_model="dummy-default")
             assert "dummy" in registered_engines()
 
-            t = load_model("dummy")
+            t = load_engine("dummy")
             assert isinstance(t, _DummyEngine)
             assert t.model_id == "dummy-default"
             assert t.transcribe("/tmp/t.wav") == "dummy:dummy-default:/tmp/t.wav"
 
-            t2 = load_model("dummy", "custom-model")
+            t2 = load_engine("dummy", "custom-model")
             assert t2.model_id == "custom-model"
         finally:
             _ENGINES.clear()
@@ -213,7 +213,7 @@ class TestEngineRegistry:
                     },
                 ),
             )
-            t = load_model("no-default", "explicit-model")
+            t = load_engine("no-default", "explicit-model")
             assert t.model_id == "explicit-model"
         finally:
             _ENGINES.clear()
@@ -232,7 +232,7 @@ class TestTranscriberProtocol:
     def test_user_class_conforms(self):
         class GoodEngine:
             ENGINE_ID = "good"
-            DEFAULT_MODEL = "good-default"
+            DEFAULT_MODEL_ID = "good-default"
 
             def __init__(self, model_id: str): ...
             def transcribe(
@@ -250,7 +250,7 @@ class TestTranscriberProtocol:
 
 class TestConstants:
     def test_faster_whisper_default(self):
-        assert FasterWhisperTranscriber.DEFAULT_MODEL == "distil-medium.en"
+        assert FasterWhisperTranscriber.DEFAULT_MODEL_ID == "distil-medium.en"
 
     def test_sensevoice_default(self):
-        assert SenseVoiceTranscriber.DEFAULT_MODEL == "iic/SenseVoiceSmall"
+        assert SenseVoiceTranscriber.DEFAULT_MODEL_ID == "iic/SenseVoiceSmall"

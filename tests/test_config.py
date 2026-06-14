@@ -118,13 +118,29 @@ class TestParseArgs:
         with patch.object(sys, "argv", ["whisper-anywhere", "--engine", "sensevoice"]):
             assert parse_args().engine == "sensevoice"
 
-    def test_vad_default_false(self):
+    def test_vad_default_none(self):
         with patch.object(sys, "argv", ["whisper-anywhere"]):
             assert parse_args().vad is None
 
-    def test_vad_flag(self):
+    def test_vad_without_value_uses_const(self):
+        with patch.object(sys, "argv", ["whisper-anywhere", "--vad"]):
+            assert parse_args().vad == "fsmn-vad"
+
+    def test_vad_explicit_engine(self):
         with patch.object(sys, "argv", ["whisper-anywhere", "--vad", "fsmn-vad"]):
             assert parse_args().vad == "fsmn-vad"
+
+    def test_vad_off(self):
+        with patch.object(sys, "argv", ["whisper-anywhere", "--vad=off"]):
+            assert parse_args().vad == "off"
+
+    def test_vad_false(self):
+        with patch.object(sys, "argv", ["whisper-anywhere", "--vad=false"]):
+            assert parse_args().vad == "false"
+
+    def test_vad_zero(self):
+        with patch.object(sys, "argv", ["whisper-anywhere", "--vad=0"]):
+            assert parse_args().vad == "0"
 
 
 def test_config_dir_constant():

@@ -248,7 +248,7 @@ class TestRunDaemonMultiKeyboard:
             emitted.append("transcribed text")
 
         async def scenario():
-            task = asyncio.create_task(main_module.run_daemon(None, model=None))
+            task = asyncio.create_task(main_module.run_daemon(None, engine=None))
             await asyncio.sleep(0.1)
             task.cancel()
             try:
@@ -582,7 +582,7 @@ class TestRunDaemonLiveMode:
 
         async def scenario():
             task = asyncio.create_task(
-                main_module.run_daemon(None, model=None, vad=_MockVAD())
+                main_module.run_daemon(None, engine=None, vad=_MockVAD())
             )
             await asyncio.sleep(0.3)
             task.cancel()
