@@ -113,16 +113,28 @@ def emit(text: Optional[str], stdout_mode: bool):
         )
 
 
+def _common_prefix_len(a: str, b: str) -> int:
+    n = 0
+    for ca, cb in zip(a, b):
+        if ca != cb:
+            break
+        n += 1
+    return n
+
+
 def emit_partial(prev_text: str, new_text: str, stdout_mode: bool):
     if prev_text == new_text:
         return
     if stdout_mode:
         print(json.dumps({"type": "partial", "text": new_text}), flush=True)
         return
+    prefix_len = _common_prefix_len(prev_text, new_text)
+    del_len = len(prev_text) - prefix_len
+    suffix = new_text[prefix_len:]
     try:
-        _backspace(len(prev_text))
-        if new_text:
-            result = subprocess.run(["ydotool", "type", new_text])
+        _backspace(del_len)
+        if suffix:
+            result = subprocess.run(["ydotool", "type", suffix])
             if result.returncode != 0:
                 print(
                     f"ydotool type failed (exit {result.returncode}) — "
@@ -140,10 +152,13 @@ def emit_final(prev_text: str, final_text: str, stdout_mode: bool):
         return
     if prev_text == final_text:
         return
+    prefix_len = _common_prefix_len(prev_text, final_text)
+    del_len = len(prev_text) - prefix_len
+    suffix = final_text[prefix_len:]
     try:
-        _backspace(len(prev_text))
-        if final_text:
-            result = subprocess.run(["ydotool", "type", final_text])
+        _backspace(del_len)
+        if suffix:
+            result = subprocess.run(["ydotool", "type", suffix])
             if result.returncode != 0:
                 print(
                     f"ydotool type failed (exit {result.returncode}) — "
