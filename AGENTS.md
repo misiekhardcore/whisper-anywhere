@@ -70,3 +70,8 @@ whisper_anywhere/
 - Model priority: CLI `--model` > config file `model=` > `iic/SenseVoiceSmall`
 - Engine priority: CLI `--engine` > config file `engine=` > `sensevoice`
 - Language priority: CLI `--language` > config file `language=` > auto-detect
+
+## Coding conventions
+
+- Prefer OOP (classes with typed attributes) over functional programming with module-level state.
+- Always add type annotations to function signatures and class attributes.

@@ -9,6 +9,7 @@ from evdev import ecodes
 import whisper_anywhere.__main__ as main_module
 from whisper_anywhere.__main__ import (
     LOCK_PATH,
+    _common_prefix_len,
     _finish_recording,
     _live_vad_loop,
     _remove_lock,
@@ -108,6 +109,32 @@ class TestEmit:
             assert "ydotool not found" in capsys.readouterr().err
 
 
+class TestCommonPrefixLen:
+    def test_full_match(self):
+        assert _common_prefix_len("hello", "hello") == 5
+
+    def test_partial_match(self):
+        assert _common_prefix_len("hello world", "hello universe") == 6
+
+    def test_no_match(self):
+        assert _common_prefix_len("abc", "xyz") == 0
+
+    def test_empty_prev(self):
+        assert _common_prefix_len("", "hello") == 0
+
+    def test_empty_new(self):
+        assert _common_prefix_len("hello", "") == 0
+
+    def test_both_empty(self):
+        assert _common_prefix_len("", "") == 0
+
+    def test_new_is_prefix_of_prev(self):
+        assert _common_prefix_len("hello world", "hello") == 5
+
+    def test_unicode(self):
+        assert _common_prefix_len("héllo", "héy") == 2
+
+
 class TestEmitPartial:
     def test_noop_when_prev_equals_new(self):
         with patch("whisper_anywhere.__main__.subprocess.run") as run:
@@ -143,6 +170,35 @@ class TestEmitPartial:
         ):
             emit_partial("old", "new", False)
             assert "ydotool not found" in capsys.readouterr().err
+
+    def test_shared_prefix_only_backspaces_suffix(self):
+        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            emit_partial("hello world", "hello universe", False)
+            calls = run.call_args_list
+            # "hello " is 6 common chars; backspace "world" (5 chars), type "universe"
+            backspace_keys = ["14:1", "14:0"] * 5
+            assert calls[0][0][0] == ["ydotool", "key"] + backspace_keys
+            assert calls[1][0][0] == ["ydotool", "type", "universe"]
+
+    def test_append_only_backspaces_nothing(self):
+        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            emit_partial("hello", "hello world", False)
+            calls = run.call_args_list
+            # common prefix is all of prev_text; 0 backspaces → no key call
+            assert len(calls) == 1
+            assert calls[0][0][0] == ["ydotool", "type", " world"]
+
+    def test_truncation_backspaces_excess_only(self):
+        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            emit_partial("hello world", "hello", False)
+            calls = run.call_args_list
+            # common prefix "hello" (5 chars); backspace " world" (6 chars); no type
+            assert len(calls) == 1
+            backspace_keys = ["14:1", "14:0"] * 6
+            assert calls[0][0][0] == ["ydotool", "key"] + backspace_keys
 
 
 class TestEmitFinal:
@@ -189,6 +245,23 @@ class TestEmitFinal:
                 "14:1",
                 "14:0",
             ]
+
+    def test_shared_prefix_final(self):
+        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            emit_final("hello world", "hello universe", False)
+            calls = run.call_args_list
+            backspace_keys = ["14:1", "14:0"] * 5
+            assert calls[0][0][0] == ["ydotool", "key"] + backspace_keys
+            assert calls[1][0][0] == ["ydotool", "type", "universe"]
+
+    def test_new_is_extended_final(self):
+        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            emit_final("hello", "hello world", False)
+            calls = run.call_args_list
+            assert len(calls) == 1
+            assert calls[0][0][0] == ["ydotool", "type", " world"]
 
     def test_ydotool_missing_warns(self, capsys):
         with patch(
