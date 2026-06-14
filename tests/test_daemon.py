@@ -32,7 +32,7 @@ class TestRunDaemonMultiKeyboard:
                 bytearray(b"test"),
             )
 
-        async def fake_finish() -> None:
+        async def fake_finish(*args: object, **kw: object) -> None:
             emitted.append("transcribed text")
 
         async def scenario() -> None:
