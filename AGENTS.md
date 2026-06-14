@@ -6,7 +6,7 @@ Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, rel
 
 ## Tests and CI
 
-- Unit tests across `audio.py`, `config.py`, `keyboard.py`, and `__main__.py`. Run with `make test`.
+- Unit tests across `audio.py`, `config.py`, `keyboard.py`, `daemon.py`, `output.py`, `recording.py`, and `__main__.py`. Run with `make test`.
 - CI runs on push/PR via `.github/workflows/ci.yml` — two jobs: `test` (pytest) and `build` (sdist + wheel).
 - The project uses `setuptools` via `pyproject.toml` with a `console_scripts` entry point. Install with `python3 -m pip install --user -e .`.
 
@@ -23,11 +23,16 @@ The daemon is a Python package `whisper_anywhere/` installed via `pip install -e
 ```
 whisper_anywhere/
 ├── __init__.py
-├── __main__.py      # entry point: main(), run_daemon(), transcribe()
+├── __main__.py      # entry point: main(), config resolution (load_hotkey, load_engine, load_vad)
 ├── audio.py         # write_wav(), read_audio(), stop_recording(), runtime paths
 ├── config.py        # check_deps(), load_config(), parse_args(), runtime_dir()
+├── daemon.py        # run_daemon(), _pump_device(), keyboard device handling
 ├── keyboard.py      # find_keyboards(), keys_held()
-└── transcribe.py    # load_model()
+├── lock.py          # acquire_lock(), _remove_lock(), LOCK_PATH
+├── output.py        # emit(), emit_partial(), emit_final(), _backspace(), _common_prefix_len()
+├── recording.py     # _start_recording(), _live_vad_loop(), _finish_recording()
+├── transcribe.py    # load_engine(), Transcriber protocol
+└── vad.py           # load_vad(), VAD protocol
 ```
 
 ## System dependencies (apt only)

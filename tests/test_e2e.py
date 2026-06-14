@@ -27,7 +27,10 @@ from pathlib import Path
 import pytest
 from evdev import ecodes
 
-import whisper_anywhere.__main__ as m
+import whisper_anywhere.daemon as daemon
+import whisper_anywhere.keyboard as keyboard
+import whisper_anywhere.recording as recording
+from whisper_anywhere.output import emit, emit_final
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -84,27 +87,27 @@ async def drive_dictation(model, pcm, monkeypatch, timeout=30):
         fake_key_event(ecodes.KEY_F12, 1),  # press
         fake_key_event(ecodes.KEY_F12, 0),  # release
     ]
-    monkeypatch.setattr(m, "find_keyboards", lambda: [FakeKeyboard(events)])
+    monkeypatch.setattr(daemon, "find_keyboards", lambda: [FakeKeyboard(events)])
 
     async def fake_start_recording():
         buffer = bytearray(pcm)  # mic input = pre-recorded audio
         read_task = asyncio.create_task(asyncio.sleep(0))
         return _FakeRecorder(), read_task, buffer
 
-    monkeypatch.setattr(m, "_start_recording", fake_start_recording)
+    monkeypatch.setattr(daemon, "_start_recording", fake_start_recording)
 
     loop = asyncio.get_running_loop()
     done = loop.create_future()
-    original_emit = m.emit
+    original_emit = emit
 
     def capturing_emit(text, stdout_mode):
         original_emit(text, stdout_mode)  # keep real stdout JSON behaviour
         if not done.done():
             done.set_result(text)
 
-    monkeypatch.setattr(m, "emit", capturing_emit)
+    monkeypatch.setattr(recording, "emit", capturing_emit)
 
-    task = asyncio.create_task(m.run_daemon(ecodes.KEY_F12, model, stdout_mode=True))
+    task = asyncio.create_task(daemon.run_daemon(ecodes.KEY_F12, model, stdout_mode=True))
     try:
         return await asyncio.wait_for(done, timeout)
     finally:
@@ -144,28 +147,28 @@ async def drive_dictation_live(model, pcm, vad, monkeypatch, timeout=30):
         fake_key_event(ecodes.KEY_F12, 1),
         fake_key_event(ecodes.KEY_F12, 0),
     ]
-    monkeypatch.setattr(m, "find_keyboards", lambda: [FakeKeyboard(events)])
+    monkeypatch.setattr(daemon, "find_keyboards", lambda: [FakeKeyboard(events)])
 
     async def fake_start_recording():
         buffer = bytearray(pcm)
         read_task = asyncio.create_task(asyncio.sleep(0))
         return _FakeRecorder(), read_task, buffer
 
-    monkeypatch.setattr(m, "_start_recording", fake_start_recording)
+    monkeypatch.setattr(daemon, "_start_recording", fake_start_recording)
 
     loop = asyncio.get_running_loop()
     done = loop.create_future()
-    original_emit_final = m.emit_final
+    original_emit_final = emit_final
 
     def capturing_emit_final(prev_text, final_text, stdout_mode):
         original_emit_final(prev_text, final_text, stdout_mode)
         if not done.done() and final_text:
             done.set_result(final_text)
 
-    monkeypatch.setattr(m, "emit_final", capturing_emit_final)
+    monkeypatch.setattr(recording, "emit_final", capturing_emit_final)
 
     task = asyncio.create_task(
-        m.run_daemon(ecodes.KEY_F12, model, stdout_mode=True, vad=vad)
+        daemon.run_daemon(ecodes.KEY_F12, model, stdout_mode=True, vad=vad)
     )
     try:
         return await asyncio.wait_for(done, timeout)

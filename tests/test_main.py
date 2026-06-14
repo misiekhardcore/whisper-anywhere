@@ -6,17 +6,20 @@ from unittest.mock import MagicMock, patch
 import pytest
 from evdev import ecodes
 
-import whisper_anywhere.__main__ as main_module
-from whisper_anywhere.__main__ import (
-    LOCK_PATH,
+import whisper_anywhere.daemon as daemon_module
+import whisper_anywhere.keyboard as keyboard_module
+import whisper_anywhere.recording as recording_module
+from whisper_anywhere.audio import stop_recording, write_wav
+from whisper_anywhere.lock import LOCK_PATH, _remove_lock, acquire_lock
+from whisper_anywhere.output import (
     _common_prefix_len,
-    _finish_recording,
-    _live_vad_loop,
-    _remove_lock,
-    acquire_lock,
     emit,
     emit_final,
     emit_partial,
+)
+from whisper_anywhere.recording import (
+    _finish_recording,
+    _live_vad_loop,
 )
 
 
@@ -80,7 +83,7 @@ class TestSingleInstance:
 
 class TestEmit:
     def test_empty_text_is_noop(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             emit("", False)
             run.assert_not_called()
 
@@ -90,20 +93,20 @@ class TestEmit:
         assert json.loads(out) == {"text": "hello world"}
 
     def test_ydotool_invoked(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             emit("hello", False)
             run.assert_called_once_with(["ydotool", "type", "hello"])
 
     def test_ydotool_failure_warns(self, capsys):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=1)
             emit("hello", False)
             assert "ydotool type failed" in capsys.readouterr().err
 
     def test_ydotool_missing_warns(self, capsys):
         with patch(
-            "whisper_anywhere.__main__.subprocess.run", side_effect=FileNotFoundError
+            "whisper_anywhere.output.subprocess.run", side_effect=FileNotFoundError
         ):
             emit("hello", False)
             assert "ydotool not found" in capsys.readouterr().err
@@ -137,7 +140,7 @@ class TestCommonPrefixLen:
 
 class TestEmitPartial:
     def test_noop_when_prev_equals_new(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             emit_partial("hello", "hello", False)
             run.assert_not_called()
 
@@ -147,7 +150,7 @@ class TestEmitPartial:
         assert json.loads(out) == {"type": "partial", "text": "new text"}
 
     def test_ydotool_backspace_and_type(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             emit_partial("abc", "def", False)
             calls = run.call_args_list
@@ -166,13 +169,13 @@ class TestEmitPartial:
 
     def test_ydotool_missing_warns(self, capsys):
         with patch(
-            "whisper_anywhere.__main__.subprocess.run", side_effect=FileNotFoundError
+            "whisper_anywhere.output.subprocess.run", side_effect=FileNotFoundError
         ):
             emit_partial("old", "new", False)
             assert "ydotool not found" in capsys.readouterr().err
 
     def test_shared_prefix_only_backspaces_suffix(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             emit_partial("hello world", "hello universe", False)
             calls = run.call_args_list
@@ -182,7 +185,7 @@ class TestEmitPartial:
             assert calls[1][0][0] == ["ydotool", "type", "universe"]
 
     def test_append_only_backspaces_nothing(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             emit_partial("hello", "hello world", False)
             calls = run.call_args_list
@@ -191,7 +194,7 @@ class TestEmitPartial:
             assert calls[0][0][0] == ["ydotool", "type", " world"]
 
     def test_truncation_backspaces_excess_only(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             emit_partial("hello world", "hello", False)
             calls = run.call_args_list
@@ -213,7 +216,7 @@ class TestEmitFinal:
         assert out == ""
 
     def test_ydotool_backspace_and_type(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             emit_final("abc", "done", False)
             calls = run.call_args_list
@@ -230,7 +233,7 @@ class TestEmitFinal:
             assert calls[1].args[0] == ["ydotool", "type", "done"]
 
     def test_backspace_only_when_final_empty(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             emit_final("abc", "", False)
             calls = run.call_args_list
@@ -247,7 +250,7 @@ class TestEmitFinal:
             ]
 
     def test_shared_prefix_final(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             emit_final("hello world", "hello universe", False)
             calls = run.call_args_list
@@ -256,7 +259,7 @@ class TestEmitFinal:
             assert calls[1][0][0] == ["ydotool", "type", "universe"]
 
     def test_new_is_extended_final(self):
-        with patch("whisper_anywhere.__main__.subprocess.run") as run:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             emit_final("hello", "hello world", False)
             calls = run.call_args_list
@@ -265,7 +268,7 @@ class TestEmitFinal:
 
     def test_ydotool_missing_warns(self, capsys):
         with patch(
-            "whisper_anywhere.__main__.subprocess.run", side_effect=FileNotFoundError
+            "whisper_anywhere.output.subprocess.run", side_effect=FileNotFoundError
         ):
             emit_final("old", "final", False)
             assert "ydotool not found" in capsys.readouterr().err
@@ -321,7 +324,7 @@ class TestRunDaemonMultiKeyboard:
             emitted.append("transcribed text")
 
         async def scenario():
-            task = asyncio.create_task(main_module.run_daemon(None, engine=None))
+            task = asyncio.create_task(daemon_module.run_daemon(None, engine=None))
             await asyncio.sleep(0.1)
             task.cancel()
             try:
@@ -331,13 +334,13 @@ class TestRunDaemonMultiKeyboard:
 
         with (
             patch.object(
-                main_module,
+                daemon_module,
                 "find_keyboards",
                 return_value=[idle_keyboard, used_keyboard],
             ),
-            patch.object(main_module, "_start_recording", fake_start),
-            patch.object(main_module, "_finish_recording", fake_finish),
-            patch.object(main_module, "stop_recording", lambda proc: None),
+            patch.object(daemon_module, "_start_recording", fake_start),
+            patch.object(daemon_module, "_finish_recording", fake_finish),
+            patch.object(daemon_module, "stop_recording", lambda proc: None),
         ):
             asyncio.run(scenario())
 
@@ -361,9 +364,9 @@ class TestLiveVADLoop:
         model.transcribe.return_value = "hello"
 
         with (
-            patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit_partial") as mock_partial,
-            patch.object(main_module, "emit_final") as mock_final,
+            patch.object(recording_module, "write_wav"),
+            patch.object(recording_module, "emit_partial") as mock_partial,
+            patch.object(recording_module, "emit_final") as mock_final,
         ):
             task = asyncio.create_task(
                 _live_vad_loop(buffer, model, None, _MockVAD(), stop_event, False)
@@ -389,9 +392,9 @@ class TestLiveVADLoop:
         model = MagicMock()
 
         with (
-            patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit_partial") as mock_partial,
-            patch.object(main_module, "emit_final") as mock_final,
+            patch.object(recording_module, "write_wav"),
+            patch.object(recording_module, "emit_partial") as mock_partial,
+            patch.object(recording_module, "emit_final") as mock_final,
         ):
             task = asyncio.create_task(
                 _live_vad_loop(buffer, model, None, _MockVAD(), stop_event, False)
@@ -418,9 +421,9 @@ class TestLiveVADLoop:
         model = MagicMock()
 
         with (
-            patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit_partial") as mock_partial,
-            patch.object(main_module, "emit_final") as mock_final,
+            patch.object(recording_module, "write_wav"),
+            patch.object(recording_module, "emit_partial") as mock_partial,
+            patch.object(recording_module, "emit_final") as mock_final,
         ):
             task = asyncio.create_task(
                 _live_vad_loop(buffer, model, None, _MockVAD(), stop_event, False)
@@ -463,9 +466,9 @@ class TestLiveVADLoop:
         grow_task = asyncio.create_task(_grow_buffer())
 
         with (
-            patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit_partial") as mock_partial,
-            patch.object(main_module, "emit_final") as mock_final,
+            patch.object(recording_module, "write_wav"),
+            patch.object(recording_module, "emit_partial") as mock_partial,
+            patch.object(recording_module, "emit_final") as mock_final,
         ):
             task = asyncio.create_task(
                 _live_vad_loop(buffer, model, None, _MockVAD(), stop_event, False)
@@ -497,8 +500,8 @@ class TestLiveVADLoop:
         model.transcribe.return_value = "hello"
 
         with (
-            patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit_partial") as mock_partial,
+            patch.object(recording_module, "write_wav"),
+            patch.object(recording_module, "emit_partial") as mock_partial,
         ):
             task = asyncio.create_task(
                 _live_vad_loop(buffer, model, None, _FailingVAD(), stop_event, False)
@@ -531,8 +534,8 @@ class TestFinishRecording:
         model.transcribe.return_value = "full text"
 
         with (
-            patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit"),
+            patch.object(recording_module, "write_wav"),
+            patch.object(recording_module, "emit"),
         ):
             await _finish_recording(proc, read_task, buffer, model, None, False)
 
@@ -552,8 +555,8 @@ class TestFinishRecording:
         model.transcribe.return_value = "tail text"
 
         with (
-            patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit_final") as mock_final,
+            patch.object(recording_module, "write_wav"),
+            patch.object(recording_module, "emit_final") as mock_final,
         ):
             await _finish_recording(
                 proc,
@@ -581,8 +584,8 @@ class TestFinishRecording:
         model = MagicMock()
 
         with (
-            patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit_final") as mock_final,
+            patch.object(recording_module, "write_wav"),
+            patch.object(recording_module, "emit_final") as mock_final,
         ):
             await _finish_recording(
                 proc,
@@ -612,8 +615,8 @@ class TestFinishRecording:
         model.transcribe.return_value = "second half"
 
         with (
-            patch.object(main_module, "write_wav"),
-            patch.object(main_module, "emit_final") as mock_final,
+            patch.object(recording_module, "write_wav"),
+            patch.object(recording_module, "emit_final") as mock_final,
         ):
             await _finish_recording(
                 proc,
@@ -655,7 +658,7 @@ class TestRunDaemonLiveMode:
 
         async def scenario():
             task = asyncio.create_task(
-                main_module.run_daemon(None, engine=None, vad=_MockVAD())
+                daemon_module.run_daemon(None, engine=None, vad=_MockVAD())
             )
             await asyncio.sleep(0.3)
             task.cancel()
@@ -665,10 +668,10 @@ class TestRunDaemonLiveMode:
                 pass
 
         with (
-            patch.object(main_module, "find_keyboards", return_value=[keyboard]),
-            patch.object(main_module, "_start_recording", fake_start),
-            patch.object(main_module, "_finish_recording") as mock_finish,
-            patch.object(main_module, "stop_recording", lambda proc: None),
+            patch.object(daemon_module, "find_keyboards", return_value=[keyboard]),
+            patch.object(daemon_module, "_start_recording", fake_start),
+            patch.object(daemon_module, "_finish_recording") as mock_finish,
+            patch.object(daemon_module, "stop_recording", lambda proc: None),
         ):
             asyncio.run(scenario())
 
