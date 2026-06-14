@@ -4,11 +4,9 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class VAD(Protocol):
-    def detect(self, audio_bytes: bytes, sample_rate: int) -> list[tuple[int, int]]:
-        ...
+    def detect(self, audio_bytes: bytes, sample_rate: int) -> list[tuple[int, int]]: ...
 
-    def reset(self) -> None:
-        ...
+    def reset(self) -> None: ...
 
 
 class FsmnVAD:
@@ -48,10 +46,13 @@ def _parse_vad_result(result) -> list[tuple[int, int]]:
 
     for item in result:
         if isinstance(item, dict):
-            start = item.get("start") or item.get("beg") or item.get("begin")
-            end = item.get("end")
-            if start is not None and end is not None:
-                segments.append((_to_samples(start), _to_samples(end)))
+            if "value" in item:
+                segments.extend(_parse_vad_result(item["value"]))
+            else:
+                start = item.get("start") or item.get("beg") or item.get("begin")
+                end = item.get("end")
+                if start is not None and end is not None:
+                    segments.append((_to_samples(start), _to_samples(end)))
         elif isinstance(item, (list, tuple)) and len(item) >= 2:
             start, end = item[0], item[1]
             segments.append((_to_samples(start), _to_samples(end)))

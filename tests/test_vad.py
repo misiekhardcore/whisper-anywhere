@@ -35,6 +35,16 @@ class TestParseVadResult:
         segments = _parse_vad_result(result)
         assert segments == [(100, 500), (800, 1200)]
 
+    def test_list_with_value_dicts(self):
+        result = [{"key": "k1", "value": [[100, 500], [800, 1200]]}]
+        segments = _parse_vad_result(result)
+        assert segments == [(100, 500), (800, 1200)]
+
+    def test_list_with_value_dicts_ignores_key_key(self):
+        result = [{"key": "k1", "value": [[100, 300]]}]
+        segments = _parse_vad_result(result)
+        assert segments == [(100, 300)]
+
     def test_list_of_dicts_with_beg(self):
         result = [{"beg": 100, "end": 500}]
         segments = _parse_vad_result(result)
@@ -99,9 +109,7 @@ class TestFsmnVAD:
     @patch("funasr.AutoModel")
     def test_init_loads_model(self, mock_auto):
         vad = FsmnVAD()
-        mock_auto.assert_called_once_with(
-            model=FsmnVAD.MODEL_ID, device="cpu"
-        )
+        mock_auto.assert_called_once_with(model=FsmnVAD.MODEL_ID, device="cpu")
 
     @patch("funasr.AutoModel")
     def test_reset_reinitializes_model(self, mock_auto):
@@ -147,22 +155,30 @@ class TestLoadVAD:
 class TestVADProtocol:
     def test_good_vad_conforms(self):
         class GoodVAD:
-            def detect(self, audio_bytes: bytes, sample_rate: int) -> list[tuple[int, int]]:
+            def detect(
+                self, audio_bytes: bytes, sample_rate: int
+            ) -> list[tuple[int, int]]:
                 return []
+
             def reset(self) -> None:
                 pass
+
         assert isinstance(GoodVAD(), VAD)
 
     def test_missing_detect_does_not_conform(self):
         class BadVAD:
             def reset(self) -> None:
                 pass
+
         assert not isinstance(BadVAD(), VAD)
 
     def test_missing_reset_does_not_conform(self):
         class BadVAD:
-            def detect(self, audio_bytes: bytes, sample_rate: int) -> list[tuple[int, int]]:
+            def detect(
+                self, audio_bytes: bytes, sample_rate: int
+            ) -> list[tuple[int, int]]:
                 return []
+
         assert not isinstance(BadVAD(), VAD)
 
     def test_fsmn_vad_conforms(self):

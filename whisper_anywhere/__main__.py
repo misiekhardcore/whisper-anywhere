@@ -113,19 +113,35 @@ async def _start_recording():
     return proc, read_task, buffer
 
 
+def _new_text_suffix(prev: str, current: str) -> str:
+    """Return the suffix of *current* not covered by *prev*."""
+    if not current:
+        return ""
+    if current.startswith(prev):
+        return current[len(prev) :]
+    return current
+
+
 async def _live_vad_loop(
     buffer, model, language, emit_fn, vad, stop_event, stdout_mode
 ):
-    """Periodically run VAD on accumulated audio, transcribe complete segments.
+    """Transcribe a sliding window of growing audio, emitting only new text.
 
-    Returns the byte offset up to which audio has been transcribed.
+    Uses the last 3 s (or the entire buffer if shorter) so that transcrip‐
+    tion improves as more context becomes available.  Only the suffix that
+    wasn't already emitted is sent to the output device.
+
+    Returns the full accumulated transcription text so ``_finish_recording``
+    can emit any remaining difference after a final high-quality pass.
     """
-    sample_width = 2
     sample_rate = 16000
-    last_transcribed = 0
-    min_segment = int(0.5 * sample_rate * sample_width)
-    silence_threshold = int(0.5 * sample_rate * sample_width)
-    force_boundary = 15 * sample_rate * sample_width
+    sample_width = 2
+    window_secs = 3
+    window_bytes = window_secs * sample_rate * sample_width
+    min_audio = int(0.25 * sample_rate * sample_width)
+
+    prev_text = ""
+    transcribed_pos = 0  # buffer length we have already transcribed
 
     consecutive_failures = 0
     max_consecutive_failures = 10
@@ -135,51 +151,37 @@ async def _live_vad_loop(
             consecutive_failures = 0
             await asyncio.sleep(0.2)
 
-            untranscribed = len(buffer) - last_transcribed
-            if untranscribed < min_segment:
+            if len(buffer) < min_audio:
                 continue
 
-            chunk = bytes(buffer[last_transcribed:])
-            segments = vad.detect(chunk, sample_rate)
-
+            # Only process new audio that arrived since last transcription.
+            new_audio = bytes(buffer[transcribed_pos:])
+            segments = vad.detect(new_audio, sample_rate)
             if not segments:
                 continue
 
-            chunk_base = last_transcribed
-            for seg_start_sample, seg_end_sample in segments:
-                seg_start = seg_start_sample * sample_width
-                seg_end = seg_end_sample * sample_width
-                seg_duration = seg_end - seg_start
-                silence_after = untranscribed - seg_end
+            # Transcribe a sliding window of the growing buffer.
+            window_start = max(0, len(buffer) - window_bytes)
+            window = bytes(buffer[window_start:])
 
-                complete = (
-                    silence_after >= silence_threshold
-                    or seg_duration >= force_boundary
+            tmp = os.path.join(runtime_dir(), f"live_{window_start}.wav")
+            try:
+                write_wav(tmp, window)
+                text = await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    lambda t=tmp, l=language: model.transcribe(t, language=l),
                 )
-
-                if complete and seg_duration >= min_segment:
-                    abs_start = chunk_base + seg_start
-                    abs_end = chunk_base + seg_end
-
-                    segment = bytes(buffer[abs_start:abs_end])
-
-                    tmp = os.path.join(
-                        runtime_dir(), f"live_{abs_start}_{abs_end}.wav"
-                    )
-                    try:
-                        write_wav(tmp, segment)
-                        text = await asyncio.get_running_loop().run_in_executor(
-                            None,
-                            lambda t=tmp, l=language: model.transcribe(t, language=l),
-                        )
-                        if text:
-                            emit_fn(text, stdout_mode)
-                        last_transcribed = abs_end
-                    finally:
-                        try:
-                            os.remove(tmp)
-                        except OSError:
-                            pass
+                if text:
+                    suffix = _new_text_suffix(prev_text, text)
+                    if suffix:
+                        emit_fn(suffix, stdout_mode)
+                    prev_text = text
+                transcribed_pos = len(buffer)
+            finally:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
         except Exception as exc:
             consecutive_failures += 1
             print(
@@ -193,7 +195,7 @@ async def _live_vad_loop(
                 )
                 break
 
-    return last_transcribed
+    return prev_text
 
 
 async def _finish_recording(
@@ -211,9 +213,9 @@ async def _finish_recording(
     if live_mode and stop_vad is not None:
         stop_vad.set()
     if live_mode and vad_task is not None:
-        last_transcribed = await vad_task
+        prev_text = await vad_task
     else:
-        last_transcribed = 0
+        prev_text = ""
 
     stop_recording(proc)
     await read_task
@@ -223,13 +225,13 @@ async def _finish_recording(
         return
 
     if live_mode:
-        remaining = buffer[last_transcribed:]
-        if remaining:
-            write_wav(AUDIO, bytes(remaining))
-            text = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: model.transcribe(AUDIO, language=language)
-            )
-            emit(text, stdout_mode)
+        write_wav(AUDIO, buffer)
+        text = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: model.transcribe(AUDIO, language=language)
+        )
+        suffix = _new_text_suffix(prev_text, text)
+        if suffix:
+            emit(suffix, stdout_mode)
     else:
         write_wav(AUDIO, buffer)
         text = await asyncio.get_running_loop().run_in_executor(
@@ -281,7 +283,13 @@ async def run_daemon(
         vad.reset()
         vad_task = asyncio.create_task(
             _live_vad_loop(
-                buffer, model, language, emit, vad, stop_vad, stdout_mode,
+                buffer,
+                model,
+                language,
+                emit,
+                vad,
+                stop_vad,
+                stdout_mode,
             )
         )
         return stop_vad, vad_task
