@@ -10,13 +10,14 @@ from whisper_anywhere.transcribe import (
     _ENGINES,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
+    VoskTranscriber,
     load_engine,
     register_engine,
     registered_engines,
 )
 
 # Optional deps may not be installed; provide mock modules so patch targets resolve.
-for mod in ("faster_whisper", "funasr"):
+for mod in ("faster_whisper", "funasr", "vosk"):
     if mod not in sys.modules:
         try:
             __import__(mod)
@@ -125,6 +126,101 @@ class TestSenseVoiceTranscriber:
         assert result == "this is a test recording"
 
 
+class TestVoskTranscriber:
+    @patch(
+        "whisper_anywhere.transcribe._resolve_vosk_model",
+        return_value="/fake/vosk/model",
+    )
+    @patch("vosk.Model")
+    def test_init(self, mock_model: MagicMock, mock_resolve: MagicMock) -> None:
+        VoskTranscriber("custom-model")
+        mock_resolve.assert_called_once_with("custom-model")
+        mock_model.assert_called_once_with("/fake/vosk/model")
+
+    @patch(
+        "whisper_anywhere.transcribe._resolve_vosk_model",
+        return_value="/fake/vosk/model",
+    )
+    @patch("vosk.Model")
+    @patch("wave.open")
+    @patch("vosk.KaldiRecognizer")
+    def test_transcribe_returns_text(
+        self,
+        mock_kaldi: MagicMock,
+        mock_wave_open: MagicMock,
+        mock_model: MagicMock,
+        mock_resolve: MagicMock,
+    ) -> None:
+        mock_wf: MagicMock = MagicMock()
+        mock_wf.getframerate.return_value = 16000
+        mock_wf.readframes.side_effect = [b"audio data", b""]
+        mock_wave_open.return_value = mock_wf
+
+        mock_rec: MagicMock = MagicMock()
+        mock_rec.FinalResult.return_value = '{"text": "hello world"}'
+        mock_kaldi.return_value = mock_rec
+
+        t: VoskTranscriber = VoskTranscriber("custom-model")
+        result: str = t.transcribe("/tmp/t.wav")
+        assert result == "hello world"
+        mock_kaldi.assert_called_once_with(mock_model.return_value, 16000)
+        mock_rec.AcceptWaveform.assert_called_once_with(b"audio data")
+
+    @patch(
+        "whisper_anywhere.transcribe._resolve_vosk_model",
+        return_value="/fake/vosk/model",
+    )
+    @patch("vosk.Model")
+    @patch("wave.open")
+    @patch("vosk.KaldiRecognizer")
+    def test_transcribe_empty_result(
+        self,
+        mock_kaldi: MagicMock,
+        mock_wave_open: MagicMock,
+        mock_model: MagicMock,
+        mock_resolve: MagicMock,
+    ) -> None:
+        mock_wf: MagicMock = MagicMock()
+        mock_wf.getframerate.return_value = 16000
+        mock_wf.readframes.return_value = b""
+        mock_wave_open.return_value = mock_wf
+
+        mock_rec: MagicMock = MagicMock()
+        mock_rec.FinalResult.return_value = '{"text": ""}'
+        mock_kaldi.return_value = mock_rec
+
+        t: VoskTranscriber = VoskTranscriber("custom-model")
+        result: str = t.transcribe("/tmp/t.wav")
+        assert result == ""
+
+    @patch(
+        "whisper_anywhere.transcribe._resolve_vosk_model",
+        return_value="/fake/vosk/model",
+    )
+    @patch("vosk.Model")
+    @patch("wave.open")
+    @patch("vosk.KaldiRecognizer")
+    def test_transcribe_missing_text_key(
+        self,
+        mock_kaldi: MagicMock,
+        mock_wave_open: MagicMock,
+        mock_model: MagicMock,
+        mock_resolve: MagicMock,
+    ) -> None:
+        mock_wf: MagicMock = MagicMock()
+        mock_wf.getframerate.return_value = 16000
+        mock_wf.readframes.side_effect = [b"audio data", b""]
+        mock_wave_open.return_value = mock_wf
+
+        mock_rec: MagicMock = MagicMock()
+        mock_rec.FinalResult.return_value = '{"partial": "hello"}'
+        mock_kaldi.return_value = mock_rec
+
+        t: VoskTranscriber = VoskTranscriber("custom-model")
+        result: str = t.transcribe("/tmp/t.wav")
+        assert result == ""
+
+
 class TestLoadModel:
     @patch("faster_whisper.WhisperModel")
     def test_faster_whisper_default_model(self, mock_whisper: MagicMock) -> None:
@@ -172,6 +268,7 @@ class TestEngineRegistry:
         engines: list[str] = registered_engines()
         assert "faster-whisper" in engines
         assert "sensevoice" in engines
+        assert "vosk" in engines
 
     def test_register_and_dispatch(self) -> None:
         class _DummyEngine:
@@ -239,6 +336,9 @@ class TestTranscriberProtocol:
     def test_sensevoice_conforms(self) -> None:
         assert isinstance(SenseVoiceTranscriber("iic/SenseVoiceSmall"), Transcriber)
 
+    def test_vosk_conforms(self) -> None:
+        assert isinstance(VoskTranscriber("vosk-model-small-en-us-0.15"), Transcriber)
+
     def test_user_class_conforms(self) -> None:
         class GoodEngine:
             ENGINE_ID: str = "good"
@@ -264,3 +364,6 @@ class TestConstants:
 
     def test_sensevoice_default(self) -> None:
         assert SenseVoiceTranscriber.DEFAULT_MODEL_ID == "iic/SenseVoiceSmall"
+
+    def test_vosk_default(self) -> None:
+        assert VoskTranscriber.DEFAULT_MODEL_ID == "vosk-model-small-en-us-0.15"
