@@ -2,6 +2,7 @@ import argparse
 import os
 import subprocess
 import sys
+from typing import Optional
 
 from whisper_anywhere.transcribe import (
     DEFAULT_ENGINE_ID,
@@ -10,10 +11,10 @@ from whisper_anywhere.transcribe import (
 )
 from whisper_anywhere.vad import FsmnVAD
 
-CONFIG_DIR = os.path.expanduser("~/.config/whisper-anywhere")
+CONFIG_DIR: str = os.path.expanduser("~/.config/whisper-anywhere")
 
 
-def runtime_dir():
+def runtime_dir() -> str:
     """Per-user, non-world-writable dir for the lock and temp audio.
 
     Prefers $XDG_RUNTIME_DIR (tmpfs, mode 0700, cleaned on logout); falls back
@@ -25,7 +26,7 @@ def runtime_dir():
     return path
 
 
-def check_deps(engine_id=DEFAULT_ENGINE_ID):
+def check_deps(engine_id: str = DEFAULT_ENGINE_ID) -> None:
     missing = []
     for cmd in ("parec", "ydotool"):
         if not subprocess.run(["which", cmd], capture_output=True).returncode == 0:
@@ -60,10 +61,10 @@ def check_deps(engine_id=DEFAULT_ENGINE_ID):
             sys.exit(1)
 
 
-def load_config(path=None):
+def load_config(path: Optional[str] = None) -> dict[str, str]:
     if path is None:
         path = os.path.join(CONFIG_DIR, "config")
-    cfg = {}
+    cfg: dict[str, str] = {}
     if os.path.exists(path):
         with open(path) as f:
             for line in f:
@@ -76,7 +77,7 @@ def load_config(path=None):
     return cfg
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="whisper-anywhere voice dictation daemon")
     p.add_argument(
         "--hotkey",
@@ -113,5 +114,5 @@ def parse_args():
     return p.parse_args()
 
 
-def handler(signum, frame):
+def handler(signum: int, frame: Optional[object]) -> None:
     raise SystemExit(0)

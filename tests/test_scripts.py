@@ -11,22 +11,22 @@ import os
 import subprocess
 import textwrap
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Optional
 
 import pytest
 
-REPO_DIR = Path(__file__).parent.parent
-REAL_PYTHON = subprocess.check_output(["which", "python3"], text=True).strip()
+REPO_DIR: Path = Path(__file__).parent.parent
+REAL_PYTHON: str = subprocess.check_output(["which", "python3"], text=True).strip()
 
 
 @pytest.fixture()
-def fake_home(tmp_path):
+def fake_home(tmp_path: Path) -> Generator[Path, None, None]:
     """Temporary HOME directory with no-op stubs for external commands."""
-    bin_dir = tmp_path / "bin"
+    bin_dir: Path = tmp_path / "bin"
     bin_dir.mkdir()
 
-    def stub(name, body):
-        p = bin_dir / name
+    def stub(name: str, body: str) -> None:
+        p: Path = bin_dir / name
         p.write_text(f"#!/usr/bin/env bash\n{body}\n")
         p.chmod(0o755)
 
@@ -60,14 +60,14 @@ def fake_home(tmp_path):
     """),
     )
 
-    return tmp_path
+    yield tmp_path
 
 
 def _run(
     script: Path, home: Path, stdin: Optional[str] = None
 ) -> subprocess.CompletedProcess:
-    bin_dir = home / "bin"
-    env = {
+    bin_dir: Path = home / "bin"
+    env: dict[str, str] = {
         **os.environ,
         "HOME": str(home),
         "USER": os.environ.get("USER", "testuser"),
@@ -86,44 +86,44 @@ def _run(
 
 
 class TestInstallUninstall:
-    def test_install_creates_config_and_service(self, fake_home):
-        result = _run(REPO_DIR / "install.sh", fake_home)
+    def test_install_creates_config_and_service(self, fake_home: Path) -> None:
+        result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
         assert result.returncode == 0, (
             f"install.sh exited {result.returncode}\n"
             f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
 
-        config = fake_home / ".config" / "whisper-anywhere" / "config"
+        config: Path = fake_home / ".config" / "whisper-anywhere" / "config"
         assert config.exists(), "config file not created"
-        text = config.read_text()
+        text: str = config.read_text()
         assert "hotkey" in text
         assert "model" in text
         assert "language" in text
 
-        service = (
+        service: Path = (
             fake_home / ".config" / "systemd" / "user" / "whisper-anywhere.service"
         )
         assert service.exists(), "service unit not created"
-        unit = service.read_text()
+        unit: str = service.read_text()
         assert "ExecStart=" in unit
         assert "Restart=on-failure" in unit
         assert "WantedBy=default.target" in unit
         assert "After=ydotool.service" in unit
 
-    def test_install_removes_legacy_desktop_entry(self, fake_home):
-        autostart = fake_home / ".config" / "autostart"
+    def test_install_removes_legacy_desktop_entry(self, fake_home: Path) -> None:
+        autostart: Path = fake_home / ".config" / "autostart"
         autostart.mkdir(parents=True)
-        desktop = autostart / "whisper-anywhere.desktop"
+        desktop: Path = autostart / "whisper-anywhere.desktop"
         desktop.write_text("[Desktop Entry]\nExec=whisper-anywhere\n")
 
         _run(REPO_DIR / "install.sh", fake_home)
 
         assert not desktop.exists(), "legacy .desktop entry should be removed"
 
-    def test_install_does_not_overwrite_existing_config(self, fake_home):
-        config_dir = fake_home / ".config" / "whisper-anywhere"
+    def test_install_does_not_overwrite_existing_config(self, fake_home: Path) -> None:
+        config_dir: Path = fake_home / ".config" / "whisper-anywhere"
         config_dir.mkdir(parents=True)
-        existing = config_dir / "config"
+        existing: Path = config_dir / "config"
         existing.write_text("hotkey=KEY_F12\n")
 
         _run(REPO_DIR / "install.sh", fake_home)
@@ -132,15 +132,15 @@ class TestInstallUninstall:
             "existing config must not be overwritten"
         )
 
-    def test_uninstall_removes_service_and_config(self, fake_home):
+    def test_uninstall_removes_service_and_config(self, fake_home: Path) -> None:
         # Install first so there is something to remove
-        result = _run(REPO_DIR / "install.sh", fake_home)
+        result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
         assert result.returncode == 0, f"install.sh failed:\n{result.stderr}"
 
-        service = (
+        service: Path = (
             fake_home / ".config" / "systemd" / "user" / "whisper-anywhere.service"
         )
-        config_dir = fake_home / ".config" / "whisper-anywhere"
+        config_dir: Path = fake_home / ".config" / "whisper-anywhere"
         assert service.exists()
         assert config_dir.exists()
 
@@ -153,14 +153,16 @@ class TestInstallUninstall:
             "config dir should be removed when user answers y"
         )
 
-    def test_uninstall_keeps_config_when_declined(self, fake_home):
+    def test_uninstall_keeps_config_when_declined(self, fake_home: Path) -> None:
         _run(REPO_DIR / "install.sh", fake_home)
 
-        config_dir = fake_home / ".config" / "whisper-anywhere"
+        config_dir: Path = fake_home / ".config" / "whisper-anywhere"
         assert config_dir.exists()
 
         # Answer 'n' to the "remove config?" prompt
-        result = _run(REPO_DIR / "uninstall.sh", fake_home, stdin="n\n")
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "uninstall.sh", fake_home, stdin="n\n"
+        )
         assert result.returncode == 0, f"uninstall.sh failed:\n{result.stderr}"
 
         assert config_dir.exists(), "config dir should be kept when user answers n"

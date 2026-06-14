@@ -12,23 +12,24 @@ import os
 import subprocess
 import types
 from pathlib import Path
+from typing import Generator, Optional
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[1]
-HOME = Path.home()
-BIN = HOME / ".local/bin/whisper-anywhere"
-SERVICE_UNIT = HOME / ".config/systemd/user/whisper-anywhere.service"
-CONFIG = HOME / ".config/whisper-anywhere/config"
+REPO: Path = Path(__file__).resolve().parents[1]
+HOME: Path = Path.home()
+BIN: Path = HOME / ".local/bin/whisper-anywhere"
+SERVICE_UNIT: Path = HOME / ".config/systemd/user/whisper-anywhere.service"
+CONFIG: Path = HOME / ".config/whisper-anywhere/config"
 
 
 @pytest.fixture(scope="session")
-def installed_app():
+def installed_app() -> Generator[Optional[types.SimpleNamespace], None, None]:
     if not os.environ.get("WHISPER_E2E_INSTALL"):
         yield None
         return
 
-    res = subprocess.run(
+    res: subprocess.CompletedProcess = subprocess.run(
         ["bash", "install.sh"], cwd=REPO, text=True, capture_output=True
     )
     if res.returncode != 0:
