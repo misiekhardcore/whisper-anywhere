@@ -25,13 +25,15 @@ def load_hotkey(cfg: dict, args: Namespace) -> Optional[int]:
     return hotkey_code
 
 
-def load_engine(cfg: dict, args: Namespace) -> Transcriber:
+def load_engine(
+    cfg: dict, args: Namespace, language: Optional[str] = None
+) -> Transcriber:
     from .transcribe import DEFAULT_ENGINE_ID, load_engine
 
     engine_id = args.engine or cfg.get("engine", DEFAULT_ENGINE_ID)
     check_deps(engine_id)
     model_id = args.model or cfg.get("model")
-    return load_engine(engine_id, model_id)
+    return load_engine(engine_id, model_id, language)
 
 
 def load_vad(cfg: dict, args: Namespace) -> Optional[VAD]:
@@ -55,9 +57,9 @@ def main():
     stdout_mode = (args.stdout or cfg.get("stdout")) in ("1", "true", "yes")
 
     hotkey_code = load_hotkey(cfg, args)
-    engine = load_engine(cfg, args)
-    vad = load_vad(cfg, args)
     language = args.language or cfg.get("language")
+    engine = load_engine(cfg, args, language)
+    vad = load_vad(cfg, args)
 
     output = TextOutput(stdout_mode)
     daemon = Daemon(hotkey_code, engine, output, language, vad)

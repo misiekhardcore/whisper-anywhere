@@ -8,6 +8,8 @@ from whisper_anywhere import Transcriber
 from whisper_anywhere.transcribe import (
     _ENGINE_DEFAULTS,
     _ENGINES,
+    _MULTILINGUAL_MODEL,
+    SENSEVOICE_SUPPORTED_LANGUAGES,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
     load_engine,
@@ -257,6 +259,50 @@ class TestTranscriberProtocol:
 
         assert not isinstance(BadEngine("x"), Transcriber)
 
+    @patch("faster_whisper.WhisperModel")
+    def test_faster_whisper_smart_multilingual(self, mock_whisper: MagicMock) -> None:
+        t: Transcriber = load_engine("faster-whisper", language="pl")
+        assert isinstance(t, FasterWhisperTranscriber)
+        mock_whisper.assert_called_once_with(
+            _MULTILINGUAL_MODEL, device="cpu", compute_type="int8"
+        )
+
+    @patch("faster_whisper.WhisperModel")
+    def test_faster_whisper_english_keeps_default(
+        self, mock_whisper: MagicMock
+    ) -> None:
+        t: Transcriber = load_engine("faster-whisper", language="en")
+        assert isinstance(t, FasterWhisperTranscriber)
+        mock_whisper.assert_called_once_with(
+            FasterWhisperTranscriber.DEFAULT_MODEL_ID,
+            device="cpu",
+            compute_type="int8",
+        )
+
+    @patch("faster_whisper.WhisperModel")
+    def test_faster_whisper_explicit_model_overrides_smart(
+        self, mock_whisper: MagicMock
+    ) -> None:
+        t: Transcriber = load_engine("faster-whisper", "tiny.en", language="pl")
+        assert isinstance(t, FasterWhisperTranscriber)
+        mock_whisper.assert_called_once_with(
+            "tiny.en", device="cpu", compute_type="int8"
+        )
+
+    def test_sensevoice_unsupported_language_warns(self) -> None:
+        with patch("funasr.AutoModel"), patch("sys.stderr") as mock_stderr:
+            load_engine("sensevoice", language="pl")
+            written: str = "".join(c[0][0] for c in mock_stderr.write.call_args_list)
+            assert "Warning" in written
+            assert "SenseVoice" in written
+            assert "pl" in written
+
+    def test_sensevoice_supported_language_no_warn(self) -> None:
+        with patch("funasr.AutoModel"), patch("sys.stderr") as mock_stderr:
+            load_engine("sensevoice", language="en")
+            written: str = "".join(c[0][0] for c in mock_stderr.write.call_args_list)
+            assert "Warning" not in written
+
 
 class TestConstants:
     def test_faster_whisper_default(self) -> None:
@@ -264,3 +310,17 @@ class TestConstants:
 
     def test_sensevoice_default(self) -> None:
         assert SenseVoiceTranscriber.DEFAULT_MODEL_ID == "iic/SenseVoiceSmall"
+
+    def test_sensevoice_supported_languages(self) -> None:
+        assert SENSEVOICE_SUPPORTED_LANGUAGES == {
+            "auto",
+            "zh",
+            "en",
+            "yue",
+            "ja",
+            "ko",
+            "nospeech",
+        }
+
+    def test_multilingual_model_constant(self) -> None:
+        assert _MULTILINGUAL_MODEL == "distil-large-v3"
