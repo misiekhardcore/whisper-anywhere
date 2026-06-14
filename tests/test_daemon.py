@@ -4,10 +4,9 @@ from unittest.mock import patch
 from evdev import ecodes
 
 import whisper_anywhere.daemon as daemon_module
-from tests.helpers import _FakeDevice, _MockVAD, _async_mock, _key_event
+from tests.helpers import _async_mock, _FakeDevice, _key_event, _MockVAD
 from whisper_anywhere.daemon import Daemon
 from whisper_anywhere.output import TextOutput
-from whisper_anywhere.recording import Recorder
 
 
 class TestRunDaemonMultiKeyboard:
@@ -33,7 +32,9 @@ class TestRunDaemonMultiKeyboard:
                 bytearray(b"test"),
             )
 
-        async def fake_finish(self, proc, read_task, buffer, *, vad_task=None, stop_vad=None):
+        async def fake_finish(
+            self, proc, read_task, buffer, *, vad_task=None, stop_vad=None
+        ):
             emitted.append("transcribed text")
 
         async def scenario():

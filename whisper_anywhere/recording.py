@@ -109,14 +109,12 @@ class Recorder:
                     if silence_bytes >= silence_threshold_bytes:
                         tmp = os.path.join(runtime_dir(), "live_final.wav")
                         try:
-                            write_wav(
-                                tmp, bytes(buffer[segment_start:last_speech_pos])
-                            )
+                            write_wav(tmp, bytes(buffer[segment_start:last_speech_pos]))
                             final_text = (
                                 await asyncio.get_running_loop().run_in_executor(
                                     None,
-                                    lambda t=tmp, lang=self._language: self._engine.transcribe(
-                                        t, language=lang
+                                    lambda t=tmp, lang=self._language: (
+                                        self._engine.transcribe(t, language=lang)
                                     ),
                                 )
                             )

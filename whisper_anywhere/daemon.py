@@ -42,16 +42,13 @@ class Daemon:
             try:
                 devices = find_keyboards()
             except RuntimeError as exc:
-                print(
-                    f"{exc} — retrying in {KEYBOARD_SCAN_DELAY_S}s", file=sys.stderr
-                )
+                print(f"{exc} — retrying in {KEYBOARD_SCAN_DELAY_S}s", file=sys.stderr)
                 await asyncio.sleep(KEYBOARD_SCAN_DELAY_S)
                 continue
 
             queue = asyncio.Queue()
             readers = [
-                asyncio.create_task(self._pump_device(dev, queue))
-                for dev in devices
+                asyncio.create_task(self._pump_device(dev, queue)) for dev in devices
             ]
 
             held = set()

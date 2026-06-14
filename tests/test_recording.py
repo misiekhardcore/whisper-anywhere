@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.helpers import _MockVAD, _async_mock
+from tests.helpers import _async_mock, _MockVAD
 from whisper_anywhere.output import TextOutput
 from whisper_anywhere.recording import Recorder
 
@@ -30,9 +30,7 @@ class TestLiveVADLoop:
             patch.object(TextOutput, "emit_partial") as mock_partial,
             patch.object(TextOutput, "emit_final") as mock_final,
         ):
-            task = asyncio.create_task(
-                recorder.live_vad_loop(buffer, stop_event)
-            )
+            task = asyncio.create_task(recorder.live_vad_loop(buffer, stop_event))
             await asyncio.sleep(0.3)
             stop_event.set()
             partial, pos = await task
@@ -60,9 +58,7 @@ class TestLiveVADLoop:
             patch.object(TextOutput, "emit_partial") as mock_partial,
             patch.object(TextOutput, "emit_final") as mock_final,
         ):
-            task = asyncio.create_task(
-                recorder.live_vad_loop(buffer, stop_event)
-            )
+            task = asyncio.create_task(recorder.live_vad_loop(buffer, stop_event))
             await asyncio.sleep(0.3)
             stop_event.set()
             partial, pos = await task
@@ -91,9 +87,7 @@ class TestLiveVADLoop:
             patch.object(TextOutput, "emit_partial") as mock_partial,
             patch.object(TextOutput, "emit_final") as mock_final,
         ):
-            task = asyncio.create_task(
-                recorder.live_vad_loop(buffer, stop_event)
-            )
+            task = asyncio.create_task(recorder.live_vad_loop(buffer, stop_event))
             await asyncio.sleep(0.3)
             stop_event.set()
             partial, pos = await task
@@ -136,9 +130,7 @@ class TestLiveVADLoop:
             patch.object(TextOutput, "emit_partial") as mock_partial,
             patch.object(TextOutput, "emit_final") as mock_final,
         ):
-            task = asyncio.create_task(
-                recorder.live_vad_loop(buffer, stop_event)
-            )
+            task = asyncio.create_task(recorder.live_vad_loop(buffer, stop_event))
             await asyncio.sleep(0.7)
             stop_event.set()
             partial, pos = await task
@@ -171,9 +163,7 @@ class TestLiveVADLoop:
             patch("whisper_anywhere.recording.write_wav"),
             patch.object(TextOutput, "emit_partial") as mock_partial,
         ):
-            task = asyncio.create_task(
-                recorder.live_vad_loop(buffer, stop_event)
-            )
+            task = asyncio.create_task(recorder.live_vad_loop(buffer, stop_event))
             await asyncio.sleep(0.5)
             stop_event.set()
             partial, pos = await task
@@ -220,9 +210,7 @@ class TestFinishRecording:
             patch("whisper_anywhere.recording.write_wav"),
             patch.object(TextOutput, "emit_final") as mock_final,
         ):
-            await recorder.finish(
-                proc, read_task, buffer, vad_task=fake_vad_task()
-            )
+            await recorder.finish(proc, read_task, buffer, vad_task=fake_vad_task())
 
         model.transcribe.assert_called_once()
         mock_final.assert_called_once_with("partial text", "tail text")
@@ -244,9 +232,7 @@ class TestFinishRecording:
             patch("whisper_anywhere.recording.write_wav"),
             patch.object(TextOutput, "emit_final") as mock_final,
         ):
-            await recorder.finish(
-                proc, read_task, buffer, vad_task=fake_vad_task()
-            )
+            await recorder.finish(proc, read_task, buffer, vad_task=fake_vad_task())
 
         model.transcribe.assert_not_called()
         mock_final.assert_not_called()
@@ -270,9 +256,7 @@ class TestFinishRecording:
             patch("whisper_anywhere.recording.write_wav"),
             patch.object(TextOutput, "emit_final") as mock_final,
         ):
-            await recorder.finish(
-                proc, read_task, buffer, vad_task=fake_vad_task()
-            )
+            await recorder.finish(proc, read_task, buffer, vad_task=fake_vad_task())
 
         model.transcribe.assert_called_once()
         mock_final.assert_called_once_with("first half", "second half")
