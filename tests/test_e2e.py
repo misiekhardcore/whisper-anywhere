@@ -7,7 +7,7 @@ import types
 import wave
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import pytest
 from evdev import ecodes
@@ -16,6 +16,8 @@ import whisper_anywhere.daemon as daemon
 from whisper_anywhere.daemon import Daemon
 from whisper_anywhere.output import TextOutput
 from whisper_anywhere.recording import Recorder
+from whisper_anywhere.transcribe import Transcriber
+from whisper_anywhere.vad import VAD
 
 FIXTURES: Path = Path(__file__).parent / "fixtures"
 
@@ -54,9 +56,9 @@ class _FakeRecorder:
 
 
 async def drive_dictation(
-    model: Any,
+    model: Transcriber,
     pcm: bytes,
-    monkeypatch: Any,
+    monkeypatch: pytest.MonkeyPatch,
     timeout: int = 30,
 ) -> Optional[str]:
     events: list[types.SimpleNamespace] = [
@@ -118,10 +120,10 @@ class StubVAD:
 
 
 async def drive_dictation_live(
-    model: Any,
+    model: Transcriber,
     pcm: bytes,
-    vad: Any,
-    monkeypatch: Any,
+    vad: VAD,
+    monkeypatch: pytest.MonkeyPatch,
     timeout: int = 30,
 ) -> Optional[str]:
     events: list[types.SimpleNamespace] = [
@@ -163,7 +165,9 @@ async def drive_dictation_live(
 
 
 @pytest.mark.asyncio
-async def test_stub_e2e(monkeypatch: Any, capsys: Any) -> None:
+async def test_stub_e2e(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
     pcm: bytes = b"\x00\x01" * 8000
 
     text: Optional[str] = await drive_dictation(
@@ -176,7 +180,9 @@ async def test_stub_e2e(monkeypatch: Any, capsys: Any) -> None:
 
 
 @pytest.mark.asyncio
-async def test_stub_e2e_live_vad(monkeypatch: Any, capsys: Any) -> None:
+async def test_stub_e2e_live_vad(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
     pcm: bytes = b"\x00\x01" * 8000
 
     text: Optional[str] = await drive_dictation_live(
@@ -190,7 +196,7 @@ async def test_stub_e2e_live_vad(monkeypatch: Any, capsys: Any) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_real_e2e_live_vad(monkeypatch: Any) -> None:
+async def test_real_e2e_live_vad(monkeypatch: pytest.MonkeyPatch) -> None:
     if not os.environ.get("WHISPER_E2E"):
         pytest.skip("set WHISPER_E2E=1 to run the real-model e2e")
 
@@ -232,7 +238,7 @@ async def test_real_e2e_live_vad(monkeypatch: Any) -> None:
 
 
 @pytest.mark.integration
-def test_install_artifacts(installed_app: Any) -> None:
+def test_install_artifacts(installed_app: Optional[object]) -> None:
     if installed_app is None:
         pytest.skip("set WHISPER_E2E_INSTALL=1 to exercise install.sh/uninstall.sh")
     assert installed_app.bin.exists()
@@ -242,7 +248,7 @@ def test_install_artifacts(installed_app: Any) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_real_e2e(monkeypatch: Any) -> None:
+async def test_real_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
     if not os.environ.get("WHISPER_E2E"):
         pytest.skip("set WHISPER_E2E=1 to run the real-model e2e")
 

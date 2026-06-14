@@ -1,7 +1,6 @@
 import struct
 import tempfile
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -120,7 +119,7 @@ async def test_read_audio_large_chunks() -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_audio_caps_at_max(monkeypatch: Any) -> None:
+async def test_read_audio_caps_at_max(monkeypatch: pytest.MonkeyPatch) -> None:
     from whisper_anywhere import audio
 
     monkeypatch.setattr(audio, "MAX_RECORDING_BYTES", 8)

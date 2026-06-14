@@ -1,5 +1,4 @@
 import asyncio
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -193,7 +192,7 @@ class TestFinishRecording:
     @pytest.mark.asyncio
     async def test_non_live_transcribes_full_buffer(self) -> None:
         buffer: bytearray = bytearray(b"\x00\x01" * 100)
-        proc: Any = _async_mock()
+        proc: MagicMock = _async_mock()
         read_task: asyncio.Task = asyncio.create_task(asyncio.sleep(0))
         model: MagicMock = MagicMock()
         model.transcribe.return_value = "full text"
@@ -212,7 +211,7 @@ class TestFinishRecording:
     @pytest.mark.asyncio
     async def test_live_transcribes_tail_audio(self) -> None:
         buffer: bytearray = bytearray(b"\x00\x01" * 2000)
-        proc: Any = _async_mock()
+        proc: MagicMock = _async_mock()
         read_task: asyncio.Task = asyncio.create_task(asyncio.sleep(0))
 
         async def fake_vad_task() -> tuple[str, int]:
@@ -235,7 +234,7 @@ class TestFinishRecording:
     @pytest.mark.asyncio
     async def test_live_no_emit_when_loop_covered_all(self) -> None:
         buffer: bytearray = bytearray(b"\x00\x01" * 3000)
-        proc: Any = _async_mock()
+        proc: MagicMock = _async_mock()
         read_task: asyncio.Task = asyncio.create_task(asyncio.sleep(0))
 
         async def fake_vad_task() -> tuple[str, int]:
@@ -257,7 +256,7 @@ class TestFinishRecording:
     @pytest.mark.asyncio
     async def test_live_emits_tail_when_partial_coverage(self) -> None:
         buffer: bytearray = bytearray(b"\x00\x01" * 3000)
-        proc: Any = _async_mock()
+        proc: MagicMock = _async_mock()
         read_task: asyncio.Task = asyncio.create_task(asyncio.sleep(0))
         half: int = len(buffer) // 2
 

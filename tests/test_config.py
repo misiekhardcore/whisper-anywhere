@@ -1,8 +1,8 @@
 import os
 import sys
 import tempfile
+from argparse import Namespace
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 from whisper_anywhere.config import CONFIG_DIR, load_config, parse_args
@@ -68,18 +68,18 @@ class TestLoadConfig:
 class TestParseArgs:
     def test_defaults(self) -> None:
         with patch.object(sys, "argv", ["whisper-anywhere"]):
-            args: Any = parse_args()
+            args: Namespace = parse_args()
             assert args.hotkey is None
             assert args.model is None
 
     def test_custom_hotkey(self) -> None:
         with patch.object(sys, "argv", ["whisper-anywhere", "--hotkey", "KEY_F12"]):
-            args: Any = parse_args()
+            args: Namespace = parse_args()
             assert args.hotkey == "KEY_F12"
 
     def test_custom_model(self) -> None:
         with patch.object(sys, "argv", ["whisper-anywhere", "--model", "tiny.en"]):
-            args: Any = parse_args()
+            args: Namespace = parse_args()
             assert args.model == "tiny.en"
 
     def test_both_args(self) -> None:
@@ -94,13 +94,13 @@ class TestParseArgs:
                 "small",
             ],
         ):
-            args: Any = parse_args()
+            args: Namespace = parse_args()
             assert args.hotkey == "KEY_GRAVE"
             assert args.model == "small"
 
     def test_stdout_flag(self) -> None:
         with patch.object(sys, "argv", ["whisper-anywhere", "--stdout"]):
-            args: Any = parse_args()
+            args: Namespace = parse_args()
             assert args.stdout is True
 
     def test_language_default_none(self) -> None:

@@ -1,6 +1,7 @@
 import json
-from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from whisper_anywhere.output import TextOutput
 
@@ -11,7 +12,7 @@ class TestEmit:
             TextOutput(False).emit("")
             run.assert_not_called()
 
-    def test_stdout_mode_writes_json(self, capsys: Any) -> None:
+    def test_stdout_mode_writes_json(self, capsys: pytest.CaptureFixture[str]) -> None:
         TextOutput(True).emit("hello world")
         out: str = capsys.readouterr().out
         assert json.loads(out) == {"text": "hello world"}
@@ -22,13 +23,13 @@ class TestEmit:
             TextOutput(False).emit("hello")
             run.assert_called_once_with(["ydotool", "type", "hello"])
 
-    def test_ydotool_failure_warns(self, capsys: Any) -> None:
+    def test_ydotool_failure_warns(self, capsys: pytest.CaptureFixture[str]) -> None:
         with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=1)
             TextOutput(False).emit("hello")
             assert "ydotool type failed" in capsys.readouterr().err
 
-    def test_ydotool_missing_warns(self, capsys: Any) -> None:
+    def test_ydotool_missing_warns(self, capsys: pytest.CaptureFixture[str]) -> None:
         with patch(
             "whisper_anywhere.output.subprocess.run", side_effect=FileNotFoundError
         ):
@@ -68,7 +69,7 @@ class TestEmitPartial:
             TextOutput(False).emit_partial("hello", "hello")
             run.assert_not_called()
 
-    def test_stdout_json_shape(self, capsys: Any) -> None:
+    def test_stdout_json_shape(self, capsys: pytest.CaptureFixture[str]) -> None:
         TextOutput(True).emit_partial("old", "new text")
         out: str = capsys.readouterr().out
         assert json.loads(out) == {"type": "partial", "text": "new text"}
@@ -77,7 +78,7 @@ class TestEmitPartial:
         with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             TextOutput(False).emit_partial("abc", "def")
-            calls: Any = run.call_args_list
+            calls: list[MagicMock] = run.call_args_list
             assert calls[0].args[0] == [
                 "ydotool",
                 "key",
@@ -90,7 +91,7 @@ class TestEmitPartial:
             ]
             assert calls[1].args[0] == ["ydotool", "type", "def"]
 
-    def test_ydotool_missing_warns(self, capsys: Any) -> None:
+    def test_ydotool_missing_warns(self, capsys: pytest.CaptureFixture[str]) -> None:
         with patch(
             "whisper_anywhere.output.subprocess.run", side_effect=FileNotFoundError
         ):
@@ -101,7 +102,7 @@ class TestEmitPartial:
         with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             TextOutput(False).emit_partial("hello world", "hello universe")
-            calls: Any = run.call_args_list
+            calls: list[MagicMock] = run.call_args_list
             backspace_keys: list[str] = ["14:1", "14:0"] * 5
             assert calls[0][0][0] == ["ydotool", "key"] + backspace_keys
             assert calls[1][0][0] == ["ydotool", "type", "universe"]
@@ -110,7 +111,7 @@ class TestEmitPartial:
         with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             TextOutput(False).emit_partial("hello", "hello world")
-            calls: Any = run.call_args_list
+            calls: list[MagicMock] = run.call_args_list
             assert len(calls) == 1
             assert calls[0][0][0] == ["ydotool", "type", " world"]
 
@@ -118,19 +119,21 @@ class TestEmitPartial:
         with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             TextOutput(False).emit_partial("hello world", "hello")
-            calls: Any = run.call_args_list
+            calls: list[MagicMock] = run.call_args_list
             assert len(calls) == 1
             backspace_keys: list[str] = ["14:1", "14:0"] * 6
             assert calls[0][0][0] == ["ydotool", "key"] + backspace_keys
 
 
 class TestEmitFinal:
-    def test_stdout_json_shape(self, capsys: Any) -> None:
+    def test_stdout_json_shape(self, capsys: pytest.CaptureFixture[str]) -> None:
         TextOutput(True).emit_final("old", "final text")
         out: str = capsys.readouterr().out
         assert json.loads(out) == {"type": "final", "text": "final text"}
 
-    def test_no_emit_when_final_empty_stdout(self, capsys: Any) -> None:
+    def test_no_emit_when_final_empty_stdout(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         TextOutput(True).emit_final("old", "")
         out: str = capsys.readouterr().out
         assert out == ""
@@ -139,7 +142,7 @@ class TestEmitFinal:
         with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             TextOutput(False).emit_final("abc", "done")
-            calls: Any = run.call_args_list
+            calls: list[MagicMock] = run.call_args_list
             assert calls[0].args[0] == [
                 "ydotool",
                 "key",
@@ -156,7 +159,7 @@ class TestEmitFinal:
         with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             TextOutput(False).emit_final("abc", "")
-            calls: Any = run.call_args_list
+            calls: list[MagicMock] = run.call_args_list
             assert len(calls) == 1
             assert calls[0].args[0] == [
                 "ydotool",
@@ -173,7 +176,7 @@ class TestEmitFinal:
         with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             TextOutput(False).emit_final("hello world", "hello universe")
-            calls: Any = run.call_args_list
+            calls: list[MagicMock] = run.call_args_list
             backspace_keys: list[str] = ["14:1", "14:0"] * 5
             assert calls[0][0][0] == ["ydotool", "key"] + backspace_keys
             assert calls[1][0][0] == ["ydotool", "type", "universe"]
@@ -182,11 +185,11 @@ class TestEmitFinal:
         with patch("whisper_anywhere.output.subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
             TextOutput(False).emit_final("hello", "hello world")
-            calls: Any = run.call_args_list
+            calls: list[MagicMock] = run.call_args_list
             assert len(calls) == 1
             assert calls[0][0][0] == ["ydotool", "type", " world"]
 
-    def test_ydotool_missing_warns(self, capsys: Any) -> None:
+    def test_ydotool_missing_warns(self, capsys: pytest.CaptureFixture[str]) -> None:
         with patch(
             "whisper_anywhere.output.subprocess.run", side_effect=FileNotFoundError
         ):

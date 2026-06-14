@@ -1,5 +1,5 @@
 import sys
-from typing import Any, Optional
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -185,7 +185,7 @@ class TestEngineRegistry:
             ) -> str:
                 return f"dummy:{self.model_id}:{audio_path}"
 
-        saved: tuple[dict[str, Any], dict[str, Any]] = (
+        saved: tuple[dict[str, Transcriber], dict[str, str]] = (
             _ENGINES.copy(),
             _ENGINE_DEFAULTS.copy(),
         )
@@ -207,7 +207,7 @@ class TestEngineRegistry:
             _ENGINE_DEFAULTS.update(saved[1])
 
     def test_register_without_default(self) -> None:
-        saved: tuple[dict[str, Any], dict[str, Any]] = (
+        saved: tuple[dict[str, Transcriber], dict[str, str]] = (
             _ENGINES.copy(),
             _ENGINE_DEFAULTS.copy(),
         )

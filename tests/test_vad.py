@@ -1,5 +1,4 @@
-from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,7 +19,7 @@ class TestParseVadResult:
         assert _parse_vad_result(None) == []
 
     def test_dict_with_value_key(self) -> None:
-        result: dict[str, Any] = {"value": [[100, 500], [800, 1200]]}
+        result: dict[str, list[list[int]]] = {"value": [[100, 500], [800, 1200]]}
         segments: list[tuple[int, int]] = _parse_vad_result(result)
         assert segments == [(100, 500), (800, 1200)]
 
@@ -38,14 +37,16 @@ class TestParseVadResult:
         assert segments == [(100, 500), (800, 1200)]
 
     def test_list_with_value_dicts(self) -> None:
-        result: list[dict[str, Any]] = [
+        result: list[dict[str, list[list[int]]]] = [
             {"key": "k1", "value": [[100, 500], [800, 1200]]}
         ]
         segments: list[tuple[int, int]] = _parse_vad_result(result)
         assert segments == [(100, 500), (800, 1200)]
 
     def test_list_with_value_dicts_ignores_key_key(self) -> None:
-        result: list[dict[str, Any]] = [{"key": "k1", "value": [[100, 300]]}]
+        result: list[dict[str, list[list[int]]]] = [
+            {"key": "k1", "value": [[100, 300]]}
+        ]
         segments: list[tuple[int, int]] = _parse_vad_result(result)
         assert segments == [(100, 300)]
 
@@ -111,25 +112,25 @@ class TestFsmnVAD:
         assert hasattr(FsmnVAD, "reset")
 
     @patch("funasr.AutoModel")
-    def test_init_loads_model(self, mock_auto: Any) -> None:
+    def test_init_loads_model(self, mock_auto: MagicMock) -> None:
         FsmnVAD()
         mock_auto.assert_called_once_with(model=FsmnVAD.ENGINE_ID, device="cpu")
 
     @patch("funasr.AutoModel")
-    def test_reset_is_noop(self, mock_auto: Any) -> None:
+    def test_reset_is_noop(self, mock_auto: MagicMock) -> None:
         vad: FsmnVAD = FsmnVAD()
         vad.reset()
         assert mock_auto.call_count == 1
 
     @patch("funasr.AutoModel")
-    def test_detect_empty_audio(self, mock_auto: Any) -> None:
+    def test_detect_empty_audio(self, mock_auto: MagicMock) -> None:
         mock_auto.return_value.generate.return_value = []
         vad: FsmnVAD = FsmnVAD()
         result: list[tuple[int, int]] = vad.detect(b"", 16000)
         assert result == []
 
     @patch("funasr.AutoModel")
-    def test_detect_returns_segments(self, mock_auto: Any) -> None:
+    def test_detect_returns_segments(self, mock_auto: MagicMock) -> None:
         mock_auto.return_value.generate.return_value = [
             [100, 500],
             [800, 1200],

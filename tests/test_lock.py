@@ -1,5 +1,5 @@
 import os
-from typing import Any
+from io import TextIOWrapper
 
 import pytest
 
@@ -36,10 +36,10 @@ class TestLock:
     def test_second_instance_denied(self) -> None:
         import fcntl
 
-        fd1: Any = open(LOCK_PATH, "w")
+        fd1: TextIOWrapper = open(LOCK_PATH, "w")
         fcntl.flock(fd1, fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
-            fd2: Any = open(LOCK_PATH, "w")
+            fd2: TextIOWrapper = open(LOCK_PATH, "w")
             with pytest.raises(OSError):
                 fcntl.flock(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB)
             fd2.close()
@@ -50,7 +50,7 @@ class TestLock:
     def test_exits_when_locked(self) -> None:
         import fcntl
 
-        fd: Any = open(LOCK_PATH, "w")
+        fd: TextIOWrapper = open(LOCK_PATH, "w")
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
             with pytest.raises(SystemExit):

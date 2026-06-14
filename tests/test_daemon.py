@@ -1,5 +1,4 @@
 import asyncio
-from typing import Any
 from unittest.mock import patch
 
 from evdev import ecodes
@@ -24,7 +23,7 @@ class TestRunDaemonMultiKeyboard:
         starts: int = 0
         emitted: list[str] = []
 
-        async def fake_start() -> tuple[Any, asyncio.Task, bytearray]:
+        async def fake_start() -> tuple[_async_mock, asyncio.Task, bytearray]:
             nonlocal starts
             starts += 1
             return (
@@ -33,15 +32,7 @@ class TestRunDaemonMultiKeyboard:
                 bytearray(b"test"),
             )
 
-        async def fake_finish(
-            self: Any,
-            proc: Any,
-            read_task: Any,
-            buffer: Any,
-            *,
-            vad_task: Any = None,
-            stop_vad: Any = None,
-        ) -> None:
+        async def fake_finish() -> None:
             emitted.append("transcribed text")
 
         async def scenario() -> None:
