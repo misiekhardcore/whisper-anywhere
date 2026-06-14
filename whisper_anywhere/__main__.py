@@ -138,6 +138,8 @@ def emit_final(prev_text: str, final_text: str, stdout_mode: bool):
         if final_text:
             print(json.dumps({"type": "final", "text": final_text}), flush=True)
         return
+    if prev_text == final_text:
+        return
     try:
         _backspace(len(prev_text))
         if final_text:
