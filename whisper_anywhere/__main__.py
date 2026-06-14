@@ -5,24 +5,30 @@ import os
 import signal
 import subprocess
 import sys
+from argparse import Namespace
+from typing import Optional
 
 from evdev import ecodes
 
 from .audio import (
-    write_wav,
-    read_audio,
-    stop_recording,
     AUDIO,
-    SAMPLE_RATE,
     CHANNELS,
     PAREC_FORMAT,
     PAREC_LATENCY_MS,
+    SAMPLE_RATE,
+    read_audio,
+    stop_recording,
+    write_wav,
 )
-from .config import check_deps, load_config, parse_args, handler, runtime_dir
-from .keyboard import find_keyboards, keys_held, WANTED_MODS
+from .config import check_deps, handler, load_config, parse_args, runtime_dir
+from .keyboard import WANTED_MODS, find_keyboards, keys_held
+from .transcribe import Transcriber
+from .vad import VAD
 
 LOCK_PATH = os.path.join(runtime_dir(), "lock")
 _lock_fd = None
+
+_SILENCE_THRESHOLD_S = 0.6
 
 # How long to wait between keyboard re-scan attempts (device absent / hotplug).
 KEYBOARD_SCAN_DELAY_S = 2
@@ -73,11 +79,21 @@ async def transcribe(proc, read_task, buffer, model, language=None):
     def _run():
         return model.transcribe(AUDIO, language=language)
 
-    text = await asyncio.get_event_loop().run_in_executor(None, _run)
+    text = await asyncio.get_running_loop().run_in_executor(None, _run)
     return text
 
 
-def emit(text, stdout_mode):
+_YDOTOOL_KEY_BACKSPACE = 14  # from /usr/include/linux/input-event-codes.h
+
+
+def _backspace(n: int):
+    if n <= 0:
+        return
+    keys = [f"{_YDOTOOL_KEY_BACKSPACE}:1", f"{_YDOTOOL_KEY_BACKSPACE}:0"] * n
+    subprocess.run(["ydotool", "key"] + keys)
+
+
+def emit(text: Optional[str], stdout_mode: bool):
     """Deliver transcribed text, surfacing ydotool failures instead of dropping them."""
     if not text:
         return
@@ -97,6 +113,47 @@ def emit(text, stdout_mode):
         )
 
 
+def emit_partial(prev_text: str, new_text: str, stdout_mode: bool):
+    if prev_text == new_text:
+        return
+    if stdout_mode:
+        print(json.dumps({"type": "partial", "text": new_text}), flush=True)
+        return
+    try:
+        _backspace(len(prev_text))
+        if new_text:
+            result = subprocess.run(["ydotool", "type", new_text])
+            if result.returncode != 0:
+                print(
+                    f"ydotool type failed (exit {result.returncode}) — "
+                    "is ydotool.service running? (systemctl --user status ydotool)",
+                    file=sys.stderr,
+                )
+    except FileNotFoundError:
+        print("ydotool not found — is it installed and on PATH?", file=sys.stderr)
+
+
+def emit_final(prev_text: str, final_text: str, stdout_mode: bool):
+    if stdout_mode:
+        if final_text:
+            print(json.dumps({"type": "final", "text": final_text}), flush=True)
+        return
+    if prev_text == final_text:
+        return
+    try:
+        _backspace(len(prev_text))
+        if final_text:
+            result = subprocess.run(["ydotool", "type", final_text])
+            if result.returncode != 0:
+                print(
+                    f"ydotool type failed (exit {result.returncode}) — "
+                    "is ydotool.service running? (systemctl --user status ydotool)",
+                    file=sys.stderr,
+                )
+    except FileNotFoundError:
+        print("ydotool not found — is it installed and on PATH?", file=sys.stderr)
+
+
 async def _start_recording():
     buffer = bytearray()
     proc = await asyncio.create_subprocess_exec(
@@ -111,6 +168,156 @@ async def _start_recording():
     )
     read_task = asyncio.create_task(read_audio(proc, buffer))
     return proc, read_task, buffer
+
+
+async def _live_vad_loop(
+    buffer: bytearray,
+    engine: Transcriber,
+    language: Optional[str],
+    vad: Optional[VAD],
+    stop_event: asyncio.Event,
+    stdout_mode: bool,
+):
+    """Emit complete speech segments in real-time.
+
+    While a segment is in progress, updates the transcription in-place via
+    emit_partial. Commits a high-quality final transcription at the end of each
+    segment (silence gap >= _SILENCE_THRESHOLD_S).
+
+    Returns (current_partial, tail_start) so _finish_recording can finalize
+    any in-flight segment.
+    """
+    sample_rate = 16000
+    sample_width = 2
+    min_audio = int(0.25 * sample_rate * sample_width)
+    silence_threshold_bytes = int(_SILENCE_THRESHOLD_S * sample_rate * sample_width)
+
+    vad_pos = 0
+    segment_start = 0
+    last_speech_pos = 0
+    in_segment = False
+    current_partial = ""
+
+    consecutive_failures = 0
+    max_consecutive_failures = 10
+
+    while not stop_event.is_set():
+        try:
+            consecutive_failures = 0
+            await asyncio.sleep(0.2)
+
+            current_pos = len(buffer)
+            if current_pos < min_audio:
+                continue
+
+            new_audio = bytes(buffer[vad_pos:current_pos])
+            segments = vad.detect(new_audio, sample_rate)
+
+            if segments:
+                if not in_segment:
+                    segment_start = vad_pos
+                    in_segment = True
+                last_speech_pos = current_pos
+
+                tmp = os.path.join(runtime_dir(), "live_segment.wav")
+                try:
+                    write_wav(tmp, bytes(buffer[segment_start:current_pos]))
+                    text = await asyncio.get_running_loop().run_in_executor(
+                        None,
+                        lambda t=tmp, lang=language: engine.transcribe(
+                            t, language=lang
+                        ),
+                    )
+                    if text != current_partial:
+                        emit_partial(current_partial, text, stdout_mode)
+                        current_partial = text
+                finally:
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
+            elif in_segment:
+                silence_bytes = current_pos - last_speech_pos
+                if silence_bytes >= silence_threshold_bytes:
+                    tmp = os.path.join(runtime_dir(), "live_final.wav")
+                    try:
+                        write_wav(tmp, bytes(buffer[segment_start:last_speech_pos]))
+                        final_text = await asyncio.get_running_loop().run_in_executor(
+                            None,
+                            lambda t=tmp, lang=language: engine.transcribe(
+                                t, language=lang
+                            ),
+                        )
+                        emit_final(current_partial, final_text, stdout_mode)
+                        current_partial = ""
+                        in_segment = False
+                    finally:
+                        try:
+                            os.remove(tmp)
+                        except OSError:
+                            pass
+
+            vad_pos = current_pos
+        except Exception as exc:
+            consecutive_failures += 1
+            print(
+                f"VAD loop error ({consecutive_failures}/{max_consecutive_failures}): {exc}",
+                file=sys.stderr,
+            )
+            if consecutive_failures >= max_consecutive_failures:
+                print(
+                    "VAD loop: too many consecutive failures, stopping VAD loop",
+                    file=sys.stderr,
+                )
+                break
+
+    tail_start = segment_start if in_segment else vad_pos
+    return current_partial, tail_start
+
+
+async def _finish_recording(
+    proc: asyncio.subprocess.Process,
+    read_task: asyncio.Task,
+    buffer: bytearray,
+    model: Transcriber,
+    language: Optional[str],
+    stdout_mode: bool,
+    *,
+    vad_task: Optional[asyncio.Task] = None,
+    stop_vad: Optional[asyncio.Event] = None,
+):
+    if stop_vad is not None:
+        stop_vad.set()
+
+    current_partial = ""
+    tail_start = 0
+    if vad_task is not None:
+        current_partial, tail_start = await vad_task
+
+    stop_recording(proc)
+    await read_task
+    await proc.wait()
+
+    if not buffer:
+        return
+
+    if vad_task is not None:
+        tail = bytes(buffer[tail_start:])
+        if not tail:
+            return
+        write_wav(AUDIO, tail)
+        text = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: model.transcribe(AUDIO, language=language)
+        )
+        if not any(c.isalpha() for c in text):
+            return
+        emit_final(current_partial, text, stdout_mode)
+    else:
+        write_wav(AUDIO, buffer)
+        text = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: model.transcribe(AUDIO, language=language)
+        )
+        emit(text, stdout_mode)
 
 
 # Sentinel pushed onto the event queue when a reader stops (device unplugged
@@ -138,11 +345,33 @@ async def _pump_device(dev, queue):
         await queue.put(_RESCAN)
 
 
-async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
+async def run_daemon(
+    hotkey_code: Optional[int],
+    engine: Transcriber,
+    stdout_mode: bool = False,
+    language: Optional[str] = None,
+    vad: Optional[VAD] = None,
+):
     asyncio.get_running_loop().set_exception_handler(_ignore_evdev_teardown_errors)
     # Outer loop re-acquires keyboards whenever one disappears so the daemon
     # survives unplug/replug without user intervention.  The loop is
     # intentionally unbounded: a hotkey daemon should always recover.
+
+    def _start_vad_loop():
+        stop_vad = asyncio.Event()
+        vad.reset()
+        vad_task = asyncio.create_task(
+            _live_vad_loop(
+                buffer,
+                engine,
+                language,
+                vad,
+                stop_vad,
+                stdout_mode,
+            )
+        )
+        return stop_vad, vad_task
+
     while True:
         try:
             devices = find_keyboards()
@@ -161,6 +390,8 @@ async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
         proc = None
         read_task = None
         buffer = None
+        vad_task = None
+        stop_vad = None
         try:
             while True:
                 event = await queue.get()
@@ -177,32 +408,81 @@ async def run_daemon(hotkey_code, model, stdout_mode=False, language=None):
                         held.add(event.code)
                         if keys_held(held) and proc is None:
                             proc, read_task, buffer = await _start_recording()
+                            if vad is not None:
+                                stop_vad, vad_task = _start_vad_loop()
                     elif event.value == 0:
                         held.discard(event.code)
                         if proc is not None:
-                            text = await transcribe(
-                                proc, read_task, buffer, model, language
+                            await _finish_recording(
+                                proc,
+                                read_task,
+                                buffer,
+                                engine,
+                                language,
+                                stdout_mode,
+                                vad_task=vad_task,
+                                stop_vad=stop_vad,
                             )
-                            emit(text, stdout_mode)
-                            proc = read_task = buffer = None
+                            proc = read_task = buffer = vad_task = stop_vad = None
                 else:
                     if event.code != hotkey_code:
                         continue
                     if event.value == 1 and proc is None:
                         proc, read_task, buffer = await _start_recording()
+                        if vad is not None:
+                            stop_vad, vad_task = _start_vad_loop()
                     elif event.value == 0 and proc is not None:
-                        text = await transcribe(
-                            proc, read_task, buffer, model, language
+                        await _finish_recording(
+                            proc,
+                            read_task,
+                            buffer,
+                            engine,
+                            language,
+                            stdout_mode,
+                            vad_task=vad_task,
+                            stop_vad=stop_vad,
                         )
-                        emit(text, stdout_mode)
-                        proc = read_task = buffer = None
+                        proc = read_task = buffer = vad_task = stop_vad = None
         finally:
             for reader in readers:
                 reader.cancel()
             await asyncio.gather(*readers, return_exceptions=True)
             if proc is not None:
+                if stop_vad is not None:
+                    stop_vad.set()
                 stop_recording(proc)
             await asyncio.sleep(KEYBOARD_RECONNECT_DELAY_S)
+
+
+def load_hotkey(cfg: dict, args: Namespace) -> tuple[str, Optional[int]]:
+    hotkey_arg = args.hotkey or cfg.get("hotkey")
+    hotkey_code: Optional[int] = None
+    if hotkey_arg:
+        hotkey_code = getattr(ecodes, hotkey_arg, None)
+        if hotkey_code is None:
+            print(f"Unknown key: {hotkey_arg}", file=sys.stderr)
+            sys.exit(1)
+    return hotkey_code
+
+
+def load_engine(cfg: dict, args: Namespace) -> Transcriber:
+    from .transcribe import DEFAULT_ENGINE_ID, load_engine
+
+    engine_id = args.engine or cfg.get("engine", DEFAULT_ENGINE_ID)
+    check_deps(engine_id)
+    model_id = args.model or cfg.get("model")
+    return load_engine(engine_id, model_id)
+
+
+def load_vad(cfg: dict, args: Namespace) -> Optional[VAD]:
+    from .vad import DEFAULT_VAD_ENGINE, load_vad
+
+    vad_engine_id = args.vad or cfg.get("vad_engine", DEFAULT_VAD_ENGINE)
+    if vad_engine_id.lower() in ("off", "false", "0"):
+        return None
+    check_deps(vad_engine_id)
+    vad = load_vad(vad_engine_id)
+    return vad
 
 
 def main():
@@ -213,34 +493,29 @@ def main():
 
     args = parse_args()
     cfg = load_config()
-    stdout_mode = args.stdout or cfg.get("stdout") in ("1", "true", "yes")
+    stdout_mode = (args.stdout or cfg.get("stdout")) in ("1", "true", "yes")
 
-    hotkey_arg = args.hotkey or cfg.get("hotkey")
-    hotkey_code = None
-    if hotkey_arg:
-        hotkey_code = getattr(ecodes, hotkey_arg, None)
-        if hotkey_code is None:
-            print(f"Unknown key: {hotkey_arg}", file=sys.stderr)
-            sys.exit(1)
-        mode_str = f"single-key ({hotkey_arg})"
-    else:
-        mode_str = "combo (Ctrl+Super+Space)"
+    hotkey_code = load_hotkey(cfg, args)
+    engine = load_engine(cfg, args)
+    vad = load_vad(cfg, args)
 
-    from .transcribe import load_model, DEFAULT_MODEL, DEFAULT_ENGINE
-
-    engine = args.engine or cfg.get("engine", DEFAULT_ENGINE)
-    check_deps(engine)
-    model_id = args.model or cfg.get("model", DEFAULT_MODEL)
-    model = load_model(model_id, engine=engine)
-
-    language = args.language or cfg.get("language") or None
+    language = args.language or cfg.get("language")
     lang_str = language or "auto-detect"
 
     print(
-        f"whisper-anywhere ready — mode: {mode_str}, language: {lang_str}",
+        f"whisper-anywhere ready — engine: {engine.ENGINE_ID}, hotkey: {f'single-key ({hotkey_code})' if hotkey_code is None else 'combo (Ctrl+Super+Space)'}, language: {lang_str}{f', live ({vad.ENGINE_ID})' if vad else ''}, stdout: {stdout_mode}",
         file=sys.stderr,
     )
-    asyncio.run(run_daemon(hotkey_code, model, stdout_mode, language))
+
+    asyncio.run(
+        run_daemon(
+            hotkey_code,
+            engine,
+            stdout_mode,
+            language,
+            vad,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -130,6 +130,53 @@ class StubModel:
         return self._text
 
 
+class StubVAD:
+    def detect(self, audio_bytes, sample_rate):
+        return [(0, len(audio_bytes))] if audio_bytes else []
+
+    def reset(self):
+        pass
+
+
+async def drive_dictation_live(model, pcm, vad, monkeypatch, timeout=30):
+    """Like drive_dictation but with live VAD enabled. Captures emit_final."""
+    events = [
+        fake_key_event(ecodes.KEY_F12, 1),
+        fake_key_event(ecodes.KEY_F12, 0),
+    ]
+    monkeypatch.setattr(m, "find_keyboards", lambda: [FakeKeyboard(events)])
+
+    async def fake_start_recording():
+        buffer = bytearray(pcm)
+        read_task = asyncio.create_task(asyncio.sleep(0))
+        return _FakeRecorder(), read_task, buffer
+
+    monkeypatch.setattr(m, "_start_recording", fake_start_recording)
+
+    loop = asyncio.get_running_loop()
+    done = loop.create_future()
+    original_emit_final = m.emit_final
+
+    def capturing_emit_final(prev_text, final_text, stdout_mode):
+        original_emit_final(prev_text, final_text, stdout_mode)
+        if not done.done() and final_text:
+            done.set_result(final_text)
+
+    monkeypatch.setattr(m, "emit_final", capturing_emit_final)
+
+    task = asyncio.create_task(
+        m.run_daemon(ecodes.KEY_F12, model, stdout_mode=True, vad=vad)
+    )
+    try:
+        return await asyncio.wait_for(done, timeout)
+    finally:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+
+
 @pytest.mark.asyncio
 async def test_stub_e2e(monkeypatch, capsys):
     pcm = b"\x00\x01" * 8000  # ~0.5s of 16 kHz mono s16le
@@ -140,6 +187,65 @@ async def test_stub_e2e(monkeypatch, capsys):
     # --stdout mode emitted exactly the JSON line the daemon would print.
     out = capsys.readouterr().out.strip().splitlines()[-1]
     assert json.loads(out) == {"text": "hello world"}
+
+
+@pytest.mark.asyncio
+async def test_stub_e2e_live_vad(monkeypatch, capsys):
+    pcm = b"\x00\x01" * 8000  # ~0.5s of 16 kHz mono s16le
+
+    text = await drive_dictation_live(
+        StubModel("hello world"), pcm, StubVAD(), monkeypatch
+    )
+
+    assert text == "hello world"
+    # Live mode emits {"type": "final", ...} instead of {"text": ...}.
+    out = capsys.readouterr().out.strip().splitlines()[-1]
+    assert json.loads(out) == {"type": "final", "text": "hello world"}
+
+
+# --------------------------------------------------------------------------- #
+# Real e2e with live VAD (gated)
+# --------------------------------------------------------------------------- #
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_real_e2e_live_vad(monkeypatch):
+    if not os.environ.get("WHISPER_E2E"):
+        pytest.skip("set WHISPER_E2E=1 to run the real-model e2e")
+
+    sys.modules.pop("faster_whisper", None)
+    pytest.importorskip("faster_whisper")
+    from whisper_anywhere.transcribe import FasterWhisperTranscriber
+
+    pytest.importorskip("funasr")
+    from whisper_anywhere.vad import FsmnVAD
+
+    clips = sorted(FIXTURES.glob("*.wav"))
+    if not clips:
+        pytest.skip("no audio fixture committed yet (see tests/fixtures/README.md)")
+
+    expected = (FIXTURES / "transcript.txt").read_text().strip()
+
+    try:
+        model = FasterWhisperTranscriber("tiny.en")
+    except Exception as exc:
+        pytest.skip(f"tiny.en model unavailable: {exc}")
+
+    try:
+        vad = FsmnVAD()
+    except Exception as exc:
+        pytest.skip(f"VAD model unavailable: {exc}")
+
+    text = await drive_dictation_live(
+        model, pcm_from_wav(clips[0]), vad, monkeypatch, timeout=120
+    )
+
+    norm_expected, norm_actual = _normalize(expected), _normalize(text)
+    ratio = SequenceMatcher(None, norm_expected, norm_actual).ratio()
+    keywords_present = set(norm_expected.split()) <= set(norm_actual.split())
+    assert ratio >= 0.75 or keywords_present, (
+        f"transcript mismatch: expected ~{norm_expected!r}, got {norm_actual!r} "
+        f"(ratio={ratio:.2f})"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -187,7 +293,7 @@ async def test_real_e2e(monkeypatch):
     norm_expected, norm_actual = _normalize(expected), _normalize(text)
     ratio = SequenceMatcher(None, norm_expected, norm_actual).ratio()
     keywords_present = set(norm_expected.split()) <= set(norm_actual.split())
-    assert ratio >= 0.6 or keywords_present, (
+    assert ratio >= 0.75 or keywords_present, (
         f"transcript mismatch: expected ~{norm_expected!r}, got {norm_actual!r} "
         f"(ratio={ratio:.2f})"
     )

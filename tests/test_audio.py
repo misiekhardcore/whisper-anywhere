@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from whisper_anywhere.audio import (
-    write_wav,
-    read_audio,
-    stop_recording,
     AUDIO,
     SAMPLE_RATE,
+    read_audio,
+    stop_recording,
+    write_wav,
 )
 
 

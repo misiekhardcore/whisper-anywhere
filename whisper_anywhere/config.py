@@ -3,7 +3,12 @@ import os
 import subprocess
 import sys
 
-from whisper_anywhere.transcribe import DEFAULT_ENGINE
+from whisper_anywhere.transcribe import (
+    DEFAULT_ENGINE_ID,
+    FasterWhisperTranscriber,
+    SenseVoiceTranscriber,
+)
+from whisper_anywhere.vad import FsmnVAD
 
 CONFIG_DIR = os.path.expanduser("~/.config/whisper-anywhere")
 
@@ -20,7 +25,7 @@ def runtime_dir():
     return path
 
 
-def check_deps(engine=DEFAULT_ENGINE):
+def check_deps(engine_id=DEFAULT_ENGINE_ID):
     missing = []
     for cmd in ("parec", "ydotool"):
         if not subprocess.run(["which", cmd], capture_output=True).returncode == 0:
@@ -31,23 +36,23 @@ def check_deps(engine=DEFAULT_ENGINE):
         print("  bash install.sh", file=sys.stderr)
         sys.exit(1)
     try:
-        from evdev import InputDevice
+        from evdev import InputDevice  # noqa: F401
     except ImportError:
         print(
             "Missing python3-evdev. Run: pkexec apt install python3-evdev",
             file=sys.stderr,
         )
         sys.exit(1)
-    if engine == "faster-whisper":
+    if engine_id == FasterWhisperTranscriber.ENGINE_ID:
         try:
-            from faster_whisper import WhisperModel
+            from faster_whisper import WhisperModel  # noqa: F401
         except ImportError:
             print(
                 "Missing faster-whisper. Run: pip3 install --user faster-whisper",
                 file=sys.stderr,
             )
             sys.exit(1)
-    elif engine == "sensevoice":
+    elif engine_id in (SenseVoiceTranscriber.ENGINE_ID, FsmnVAD.ENGINE_ID):
         try:
             import funasr  # noqa: F401
         except ImportError:
@@ -89,13 +94,21 @@ def parse_args():
     p.add_argument(
         "--engine",
         default=None,
-        choices=("faster-whisper", "sensevoice"),
+        choices=(FasterWhisperTranscriber.ENGINE_ID, SenseVoiceTranscriber.ENGINE_ID),
         help="Transcription engine (default: sensevoice)",
     )
     p.add_argument(
         "--stdout",
         action="store_true",
         help="Write transcribed text as JSON lines to stdout instead of ydotool",
+    )
+    p.add_argument(
+        "--vad",
+        nargs="?",
+        default=None,
+        const=FsmnVAD.ENGINE_ID,
+        metavar="ENGINE",
+        help="VAD engine for live streaming (default: fsmn-vad). Use --vad=off to disable.",
     )
     return p.parse_args()
 
