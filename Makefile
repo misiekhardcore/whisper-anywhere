@@ -14,8 +14,8 @@ install:
 		|| $(PYTHON) -m pip install --user --break-system-packages -e .
 
 install-deps:
-	$(PYTHON) -m pip install --user evdev pytest pytest-asyncio build ruff 2>/dev/null; \
-	$(PYTHON) -m pip install --user --break-system-packages evdev pytest pytest-asyncio build ruff 2>/dev/null || true
+	$(PYTHON) -m pip install --user evdev pytest pytest-asyncio build ruff numpy 2>/dev/null; \
+	$(PYTHON) -m pip install --user --break-system-packages evdev pytest pytest-asyncio build ruff numpy 2>/dev/null || true
 
 build: install-deps
 	$(PYTHON) -m build
