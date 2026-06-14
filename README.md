@@ -112,7 +112,7 @@ Downloaded automatically on first use. Default engine uses SenseVoice via [FunAS
 
 | Model | Size | Notes |
 |---|---|---|
-| `iic/SenseVoiceSmall` | ~120 MB | Default, auto-detects 50+ languages, MIT license, 15-17x faster than Whisper on CPU. **Explicit language codes**: zh, en, yue, ja, ko only. |
+| `iic/SenseVoiceSmall` | ~120 MB | Default, MIT license, 15-17x faster than Whisper on CPU. **Explicit language codes**: zh, en, yue, ja, ko only. |
 
 ### faster-whisper (`--engine faster-whisper`)
 
@@ -124,7 +124,7 @@ Downloaded automatically on first use. Default engine uses SenseVoice via [FunAS
 
 Set via config or `--model`. When you request a non-English language without specifying a model, `distil-large-v3` is automatically selected.
 
-> **Performance**: SenseVoiceSmall is 15-17x faster than Whisper on CPU (auto-detects 50+ languages; explicit codes: zh, en, yue, ja, ko). faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU.
+> **Performance**: SenseVoiceSmall is 15-17x faster than Whisper on CPU (explicit codes: zh, en, yue, ja, ko). faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU.
 
 ## Project layout
 
