@@ -8,6 +8,7 @@ Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, rel
 
 - Unit tests across `audio.py`, `config.py`, `keyboard.py`, `daemon.py`, `output.py`, `recording.py`, and `__main__.py`. Run with `make test`.
 - CI runs on push/PR via `.github/workflows/ci.yml` — two jobs: `test` (pytest) and `build` (sdist + wheel).
+- **Pre-commit gate:** Run `make lint && make test` before any commit. Fix all failures.
 - The project uses `setuptools` via `pyproject.toml` with a `console_scripts` entry point. Install with `python3 -m pip install --user -e .`.
 
 ## External Python packages
