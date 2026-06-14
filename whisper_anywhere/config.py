@@ -3,7 +3,12 @@ import os
 import subprocess
 import sys
 
-from whisper_anywhere.transcribe import DEFAULT_ENGINE
+from whisper_anywhere.transcribe import (
+    DEFAULT_ENGINE,
+    FasterWhisperTranscriber,
+    SenseVoiceTranscriber,
+)
+from whisper_anywhere.vad import FsmnVAD
 
 CONFIG_DIR = os.path.expanduser("~/.config/whisper-anywhere")
 
@@ -38,7 +43,7 @@ def check_deps(engine=DEFAULT_ENGINE):
             file=sys.stderr,
         )
         sys.exit(1)
-    if engine == "faster-whisper":
+    if engine == FasterWhisperTranscriber.ENGINE_ID:
         try:
             from faster_whisper import WhisperModel
         except ImportError:
@@ -47,7 +52,7 @@ def check_deps(engine=DEFAULT_ENGINE):
                 file=sys.stderr,
             )
             sys.exit(1)
-    elif engine == "sensevoice":
+    elif engine in (SenseVoiceTranscriber.ENGINE_ID, FsmnVAD.ENGINE_ID):
         try:
             import funasr  # noqa: F401
         except ImportError:
@@ -89,7 +94,7 @@ def parse_args():
     p.add_argument(
         "--engine",
         default=None,
-        choices=("faster-whisper", "sensevoice"),
+        choices=(FasterWhisperTranscriber.ENGINE_ID, SenseVoiceTranscriber.ENGINE_ID),
         help="Transcription engine (default: sensevoice)",
     )
     p.add_argument(
@@ -98,9 +103,11 @@ def parse_args():
         help="Write transcribed text as JSON lines to stdout instead of ydotool",
     )
     p.add_argument(
-        "--live",
-        action="store_true",
-        help="Streaming mode: transcribe and type phrases as you speak using VAD",
+        "--vad",
+        default=None,
+        metavar="ENGINE",
+        choices=(FsmnVAD.ENGINE_ID,),
+        help="VAD engine for live streaming (e.g. fsmn-vad). Enables live mode.",
     )
     return p.parse_args()
 

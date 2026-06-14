@@ -109,13 +109,13 @@ class TestFsmnVAD:
     @patch("funasr.AutoModel")
     def test_init_loads_model(self, mock_auto):
         vad = FsmnVAD()
-        mock_auto.assert_called_once_with(model=FsmnVAD.MODEL_ID, device="cpu")
+        mock_auto.assert_called_once_with(model=FsmnVAD.ENGINE_ID, device="cpu")
 
     @patch("funasr.AutoModel")
-    def test_reset_reinitializes_model(self, mock_auto):
+    def test_reset_is_noop(self, mock_auto):
         vad = FsmnVAD()
         vad.reset()
-        assert mock_auto.call_count >= 2
+        assert mock_auto.call_count == 1
 
     @patch("funasr.AutoModel")
     def test_detect_empty_audio(self, mock_auto):
@@ -137,15 +137,14 @@ class TestFsmnVAD:
 
 class TestLoadVAD:
     def test_fsmn_vad_default(self):
-        with patch("whisper_anywhere.vad.FsmnVAD") as mock_cls:
+        with patch("whisper_anywhere.vad.FsmnVAD"):
             vad = load_vad()
-            mock_cls.assert_called_once()
-            assert vad is mock_cls.return_value
+            assert isinstance(vad, FsmnVAD)
 
     def test_fsmn_vad_explicit(self):
-        with patch("whisper_anywhere.vad.FsmnVAD") as mock_cls:
+        with patch("whisper_anywhere.vad.FsmnVAD"):
             vad = load_vad("fsmn-vad")
-            mock_cls.assert_called_once()
+            assert isinstance(vad, FsmnVAD)
 
     def test_unknown_engine(self):
         with pytest.raises(ValueError, match="Unknown VAD engine"):

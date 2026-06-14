@@ -1,5 +1,5 @@
 import sys
-from typing import Protocol, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -10,13 +10,13 @@ class VAD(Protocol):
 
 
 class FsmnVAD:
-    MODEL_ID = "fsmn-vad"
+    ENGINE_ID = "fsmn-vad"
 
     def __init__(self):
         from funasr import AutoModel
 
-        print(f"Loading VAD model '{self.MODEL_ID}'...", file=sys.stderr)
-        self._model = AutoModel(model=self.MODEL_ID, device="cpu")
+        print(f"Loading VAD model '{self.ENGINE_ID}'...", file=sys.stderr)
+        self._model = AutoModel(model=self.ENGINE_ID, device="cpu")
 
     def detect(self, audio_bytes: bytes, sample_rate: int) -> list[tuple[int, int]]:
         import numpy as np
@@ -28,9 +28,7 @@ class FsmnVAD:
         return _parse_vad_result(result)
 
     def reset(self) -> None:
-        from funasr import AutoModel
-
-        self._model = AutoModel(model=self.MODEL_ID, device="cpu")
+        pass  # FSMN-VAD is stateless between recordings
 
 
 def _parse_vad_result(result) -> list[tuple[int, int]]:
@@ -80,7 +78,26 @@ def _merge_overlapping(
     return merged
 
 
-def load_vad(engine: str = "fsmn-vad") -> VAD:
-    if engine == "fsmn-vad":
-        return FsmnVAD()
-    raise ValueError(f"Unknown VAD engine: {engine!r}")
+DEFAULT_VAD_ENGINE = FsmnVAD.ENGINE_ID
+_VAD_ENGINES: dict[str, type[VAD]] = {}
+
+
+def register_vad_engine(cls: type[VAD]) -> None:
+    _VAD_ENGINES[cls.ENGINE_ID] = cls
+
+
+def registered_vad_engines() -> list[str]:
+    return list(_VAD_ENGINES)
+
+
+register_vad_engine(FsmnVAD)
+
+
+def load_vad(engine_id: Optional[str] = DEFAULT_VAD_ENGINE) -> VAD:
+    if engine_id not in _VAD_ENGINES:
+        raise ValueError(
+            f"Unknown VAD engine: {engine_id!r}. "
+            f"Registered engines: {registered_vad_engines()}"
+        )
+    cls = _VAD_ENGINES[engine_id]
+    return cls()

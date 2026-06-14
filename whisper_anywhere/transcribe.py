@@ -2,11 +2,6 @@ import re
 import sys
 from typing import Optional, Protocol, runtime_checkable
 
-DEFAULT_ENGINE = "sensevoice"
-FASTER_WHISPER_DEFAULT = "distil-medium.en"
-SENSEVOICE_DEFAULT = "iic/SenseVoiceSmall"
-DEFAULT_MODEL = SENSEVOICE_DEFAULT
-
 _SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
 
 
@@ -14,13 +9,19 @@ _SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
 class Transcriber(Protocol):
     """Interface every transcription engine must implement."""
 
+    ENGINE_ID: str
+    DEFAULT_MODEL: str
+
     def __init__(self, model_id: str) -> None: ...
 
     def transcribe(self, audio_path: str, language: Optional[str] = None) -> str: ...
 
 
 class FasterWhisperTranscriber:
-    def __init__(self, model_id: str):
+    ENGINE_ID = "faster-whisper"
+    DEFAULT_MODEL = "distil-medium.en"
+
+    def __init__(self, model_id: str = DEFAULT_MODEL):
         from faster_whisper import WhisperModel
 
         print(f"Loading faster-whisper model '{model_id}'...", file=sys.stderr)
@@ -32,7 +33,10 @@ class FasterWhisperTranscriber:
 
 
 class SenseVoiceTranscriber:
-    def __init__(self, model_id: str):
+    ENGINE_ID = "sensevoice"
+    DEFAULT_MODEL = "iic/SenseVoiceSmall"
+
+    def __init__(self, model_id: str = DEFAULT_MODEL):
         from funasr import AutoModel
 
         print(f"Loading SenseVoice model '{model_id}'...", file=sys.stderr)
@@ -50,35 +54,45 @@ class SenseVoiceTranscriber:
         return _SENSEVOICE_TAG_RE.sub("", text).strip()
 
 
+DEFAULT_ENGINE = SenseVoiceTranscriber.ENGINE_ID
 _ENGINES: dict[str, type[Transcriber]] = {}
 _ENGINE_DEFAULTS: dict[str, str] = {}
 
 
 def register_engine(
-    name: str, cls: type[Transcriber], default_model: Optional[str] = None
+    cls: type[Transcriber], default_model: Optional[str] = None
 ) -> None:
-    _ENGINES[name] = cls
-    if default_model is not None:
-        _ENGINE_DEFAULTS[name] = default_model
+    _ENGINES[cls.ENGINE_ID] = cls
+    resolved = (
+        default_model
+        if default_model is not None
+        else getattr(cls, "DEFAULT_MODEL", None)
+    )
+    if resolved is not None:
+        _ENGINE_DEFAULTS[cls.ENGINE_ID] = resolved
 
 
 def registered_engines() -> list[str]:
     return list(_ENGINES)
 
 
-register_engine("faster-whisper", FasterWhisperTranscriber, FASTER_WHISPER_DEFAULT)
-register_engine("sensevoice", SenseVoiceTranscriber, SENSEVOICE_DEFAULT)
+register_engine(
+    FasterWhisperTranscriber,
+)
+register_engine(
+    SenseVoiceTranscriber,
+)
 
 
 def load_model(
-    model_id: Optional[str] = None, engine: str = "sensevoice"
+    engine_id: Optional[str] = DEFAULT_ENGINE, model_id: Optional[str] = None
 ) -> Transcriber:
-    if engine not in _ENGINES:
+    if engine_id not in _ENGINES:
         raise ValueError(
-            f"Unknown engine: {engine!r}. "
+            f"Unknown engine: {engine_id!r}. "
             f"Registered engines: {registered_engines()}"
         )
-    cls = _ENGINES[engine]
+    cls = _ENGINES[engine_id]
     if model_id is None:
-        model_id = _ENGINE_DEFAULTS.get(engine)
+        model_id = _ENGINE_DEFAULTS.get(engine_id)
     return cls(model_id)

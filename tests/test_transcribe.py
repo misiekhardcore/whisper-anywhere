@@ -14,8 +14,6 @@ for mod in ("faster_whisper", "funasr"):
 
 from whisper_anywhere import Transcriber
 from whisper_anywhere.transcribe import (
-    FASTER_WHISPER_DEFAULT,
-    SENSEVOICE_DEFAULT,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
     _ENGINES,
@@ -128,15 +126,15 @@ class TestSenseVoiceTranscriber:
 class TestLoadModel:
     @patch("faster_whisper.WhisperModel")
     def test_faster_whisper_default_model(self, mock_whisper):
-        t = load_model(None, "faster-whisper")
+        t = load_model("faster-whisper")
         assert isinstance(t, FasterWhisperTranscriber)
         mock_whisper.assert_called_once_with(
-            FASTER_WHISPER_DEFAULT, device="cpu", compute_type="int8"
+            FasterWhisperTranscriber.DEFAULT_MODEL, device="cpu", compute_type="int8"
         )
 
     @patch("faster_whisper.WhisperModel")
     def test_faster_whisper_custom_model(self, mock_whisper):
-        t = load_model("tiny.en", "faster-whisper")
+        t = load_model("faster-whisper", "tiny.en")
         assert isinstance(t, FasterWhisperTranscriber)
         mock_whisper.assert_called_once_with(
             "tiny.en", device="cpu", compute_type="int8"
@@ -144,23 +142,25 @@ class TestLoadModel:
 
     @patch("funasr.AutoModel")
     def test_sensevoice_default_model(self, mock_auto):
-        t = load_model(None, "sensevoice")
+        t = load_model("sensevoice")
         assert isinstance(t, SenseVoiceTranscriber)
-        mock_auto.assert_called_once_with(model=SENSEVOICE_DEFAULT, device="cpu")
+        mock_auto.assert_called_once_with(
+            model=SenseVoiceTranscriber.DEFAULT_MODEL, device="cpu"
+        )
 
     @patch("funasr.AutoModel")
     def test_sensevoice_custom_model(self, mock_auto):
-        t = load_model("iic/SenseVoiceSmall", "sensevoice")
+        t = load_model("sensevoice", "iic/SenseVoiceSmall")
         assert isinstance(t, SenseVoiceTranscriber)
         mock_auto.assert_called_once_with(model="iic/SenseVoiceSmall", device="cpu")
 
     def test_default_engine_is_sensevoice(self):
-        t = load_model(None)
+        t = load_model()
         assert isinstance(t, SenseVoiceTranscriber)
 
     def test_invalid_engine_raises(self):
         with pytest.raises(ValueError, match="Unknown engine.*sensevoice"):
-            load_model(None, "invalid")
+            load_model("invalid")
 
 
 class TestEngineRegistry:
@@ -171,23 +171,27 @@ class TestEngineRegistry:
 
     def test_register_and_dispatch(self):
         class _DummyEngine:
+            ENGINE_ID = "dummy"
+
             def __init__(self, model_id: str):
                 self.model_id = model_id
 
-            def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
+            def transcribe(
+                self, audio_path: str, language: Optional[str] = None
+            ) -> str:
                 return f"dummy:{self.model_id}:{audio_path}"
 
         saved = (_ENGINES.copy(), _ENGINE_DEFAULTS.copy())
         try:
-            register_engine("dummy", _DummyEngine, default_model="dummy-default")
+            register_engine(_DummyEngine, default_model="dummy-default")
             assert "dummy" in registered_engines()
 
-            t = load_model(None, "dummy")
+            t = load_model("dummy")
             assert isinstance(t, _DummyEngine)
             assert t.model_id == "dummy-default"
             assert t.transcribe("/tmp/t.wav") == "dummy:dummy-default:/tmp/t.wav"
 
-            t2 = load_model("custom-model", "dummy")
+            t2 = load_model("dummy", "custom-model")
             assert t2.model_id == "custom-model"
         finally:
             _ENGINES.clear()
@@ -198,11 +202,18 @@ class TestEngineRegistry:
     def test_register_without_default(self):
         saved = (_ENGINES.copy(), _ENGINE_DEFAULTS.copy())
         try:
-            register_engine("no-default", type("_", (), {
-                "__init__": lambda self, m: setattr(self, "model_id", m),
-                "transcribe": lambda self, p, language=None: "",
-            }))
-            t = load_model("explicit-model", "no-default")
+            register_engine(
+                type(
+                    "_",
+                    (),
+                    {
+                        "ENGINE_ID": "no-default",
+                        "__init__": lambda self, m: setattr(self, "model_id", m),
+                        "transcribe": lambda self, p, language=None: "",
+                    },
+                ),
+            )
+            t = load_model("no-default", "explicit-model")
             assert t.model_id == "explicit-model"
         finally:
             _ENGINES.clear()
@@ -220,19 +231,25 @@ class TestTranscriberProtocol:
 
     def test_user_class_conforms(self):
         class GoodEngine:
+            ENGINE_ID = "good"
+            DEFAULT_MODEL = "good-default"
             def __init__(self, model_id: str): ...
-            def transcribe(self, audio_path: str, language: Optional[str] = None) -> str: ...
+            def transcribe(
+                self, audio_path: str, language: Optional[str] = None
+            ) -> str: ...
+
         assert isinstance(GoodEngine("x"), Transcriber)
 
     def test_missing_method_does_not_conform(self):
         class BadEngine:
             def __init__(self, model_id: str): ...
+
         assert not isinstance(BadEngine("x"), Transcriber)
 
 
 class TestConstants:
     def test_faster_whisper_default(self):
-        assert FASTER_WHISPER_DEFAULT == "distil-medium.en"
+        assert FasterWhisperTranscriber.DEFAULT_MODEL == "distil-medium.en"
 
     def test_sensevoice_default(self):
-        assert SENSEVOICE_DEFAULT == "iic/SenseVoiceSmall"
+        assert SenseVoiceTranscriber.DEFAULT_MODEL == "iic/SenseVoiceSmall"
