@@ -25,8 +25,6 @@ class Typer(ABC):
         ...
 
 
-_XKB_EVDEV_OFFSET = 8
-_XKB_KEY_SHIFT_L = 0xFFE1
 _XKB_KEY_ISO_LEVEL3_SHIFT = 0xFE03
 
 
@@ -52,9 +50,8 @@ class KeycodeTyper(Typer):
 
     def __init__(self) -> None:
         self._lib: CDLL | None = None
-        self._keymap: int | None = None
         self._l3_keycode: int | None = None
-        self._lookup: dict[int, tuple[int, int]] = {}
+        self._lookup: dict[int, int] = {}
         self._init()
 
     def _init(self) -> None:
@@ -76,7 +73,6 @@ class KeycodeTyper(Typer):
         if not km:
             return
         lib.xkb_keymap_unref.argtypes = [c_void_p]
-        self._keymap = km
         self._lib = lib
 
         lib.xkb_keymap_min_keycode.restype = c_uint32
@@ -91,7 +87,7 @@ class KeycodeTyper(Typer):
             c_void_p, c_uint32, c_int, c_int, POINTER(c_void_p),
         ]
 
-        lookup: dict[int, tuple[int, int]] = {}
+        lookup: dict[int, int] = {}
         l3_kc: int | None = None
 
         for kc in range(min_kc, max_kc + 1):
@@ -113,52 +109,19 @@ class KeycodeTyper(Typer):
         self._lookup = lookup
         self._l3_keycode = l3_kc
 
-    def _get_kc(self, keysym: int) -> int | None:
-        entry = self._lookup.get(keysym)
+    def _hex_keycode(self, ks: int) -> int | None:
+        entry = self._lookup.get(ks)
         if entry is not None:
-            return entry[0] - _XKB_EVDEV_OFFSET
+            kc, level = entry
+            return kc - 8
         return None
-
-    def _l3_evdev(self) -> int | None:
-        if self._l3_keycode is not None:
-            return self._l3_keycode - _XKB_EVDEV_OFFSET
-        return None
-
-    def _tap_key(self, code: int) -> None:
-        _ydotool_key((code, 1), (code, 0))
-
-    def _type_key_with_modifiers(self, keycode: int, level: int) -> None:
-        ev = keycode - _XKB_EVDEV_OFFSET
-        pairs: list[tuple[int, int]] = []
-        if level == 1:
-            pairs.append((42, 1))
-        elif level >= 2:
-            l3 = self._l3_evdev()
-            if l3 is not None:
-                pairs.append((l3, 1))
-        if level == 3:
-            pairs.append((42, 1))
-        pairs.append((ev, 1))
-        pairs.append((ev, 0))
-        if level == 3:
-            pairs.append((42, 0))
-        if level >= 2:
-            l3 = self._l3_evdev()
-            if l3 is not None:
-                pairs.append((l3, 0))
-        if level == 1:
-            pairs.append((42, 0))
-        _ydotool_key(*pairs)
 
     def _type_unicode_hex(self, keysym: int) -> None:
         hex_str = format(keysym, "x")
-        _ydotool_key((29, 1), (42, 1))
-        _ydotool_key((30, 1), (30, 0))
-        _ydotool_key((42, 0), (29, 0))
+        _ydotool_key((29, 1), (42, 1), (30, 1), (30, 0), (42, 0), (29, 0))
         time.sleep(0.02)
         for ch in hex_str:
-            ks = ord(ch)
-            kc = self._get_kc(ks)
+            kc = self._hex_keycode(ord(ch))
             if kc is not None:
                 _ydotool_key((kc, 1), (kc, 0))
             time.sleep(0.01)
@@ -167,20 +130,20 @@ class KeycodeTyper(Typer):
     def type_text(self, text: str) -> None:
         if not text:
             return
-        if self._keymap is None:
+        if self._lib is None:
             _ydotool_type(text)
             return
-
+        ascii_buf: list[str] = []
         for char in text:
-            ks = ord(char)
-            entry = self._lookup.get(ks)
-            if entry is not None:
-                kc, level = entry
-                self._type_key_with_modifiers(kc, level)
-            elif ks < 128:
-                _ydotool_type(char)
+            if ord(char) < 128:
+                ascii_buf.append(char)
             else:
-                self._type_unicode_hex(ks)
+                if ascii_buf:
+                    _ydotool_type("".join(ascii_buf))
+                    ascii_buf.clear()
+                self._type_unicode_hex(ord(char))
+        if ascii_buf:
+            _ydotool_type("".join(ascii_buf))
 
     def backspace(self, n: int) -> None:
         for _ in range(n):
@@ -275,7 +238,7 @@ class TextOutput:
         if shutil.which("wtype") and WtypeTyper._check_compositor():
             return WtypeTyper()
         keycode = KeycodeTyper()
-        if keycode._keymap is not None:
+        if keycode._lib is not None:
             return keycode
         if shutil.which("ydotool"):
             return YdotoolTyper()

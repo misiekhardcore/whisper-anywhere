@@ -328,31 +328,44 @@ class TestKeycodeTyper:
             patch("whisper_anywhere.output.subprocess.run") as run,
         ):
             t = KeycodeTyper()
-            t._keymap = None
+            t._lib = None
             run.return_value = MagicMock(returncode=0)
             t.type_text("hello")
             run.assert_called_once_with(["ydotool", "type", "hello"])
 
-    def test_type_text_with_init(self) -> None:
+    def test_ascii_uses_ydotool_type(self) -> None:
         with (
             patch.object(KeycodeTyper, "_init", return_value=None),
-            patch("whisper_anywhere.output._ydotool_key") as yk,
+            patch("whisper_anywhere.output.subprocess.run") as run,
         ):
             t = KeycodeTyper()
-            t._keymap = 1
-            t._lookup = {0x61: (38, 0), 0x62: (56, 0)}
+            t._lib = object()
+            run.return_value = MagicMock(returncode=0)
+            t.type_text("hello")
+            run.assert_called_once_with(["ydotool", "type", "hello"])
 
-            t.type_text("ab")
-            # 'a' XKB KC=38 → evdev 30, 'b' XKB KC=56 → evdev 48
-            # Expect: ydotool key 30:1 30:0 48:1 48:0
-            yk.assert_any_call((30, 1), (30, 0))
-            yk.assert_any_call((48, 1), (48, 0))
+    def test_non_ascii_splits_around_hex_input(self) -> None:
+        with patch.object(KeycodeTyper, "_init", return_value=None):
+            t = KeycodeTyper()
+            t._lib = object()
+            t._lookup = {0x61: (38, 0), 0x31: (10, 0), 0x20: (65, 0)}
+            with patch("whisper_anywhere.output.subprocess.run") as run:
+                run.return_value = MagicMock(returncode=0)
+                t.type_text("aąb")
+                calls = [
+                    c.args[0]
+                    for c in run.call_args_list
+                    if c.args[0][:2] == ["ydotool", "type"]
+                ]
+                # ASCII before and after non-ASCII 'ą' is flushed separately
+                assert ["ydotool", "type", "a"] in calls
+                assert ["ydotool", "type", "b"] in calls
 
     def test_backspace_zero_noop(self) -> None:
-        t = KeycodeTyper()
-        with patch.object(KeycodeTyper, "_tap_key") as tap:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            t = KeycodeTyper()
             t.backspace(0)
-            tap.assert_not_called()
+            run.assert_not_called()
 
 
 class TestTextOutputProbe:
@@ -374,8 +387,7 @@ class TestTextOutputProbe:
                 "ydotool": "/usr/bin/ydotool",
             }.get(cmd)
             kt = KeycodeTyper()
-            kt._keymap = 1
-            kt._socket_path = "/tmp/test.sock"
+            kt._lib = object()
             with patch(
                 "whisper_anywhere.output.KeycodeTyper", return_value=kt
             ):
@@ -394,7 +406,7 @@ class TestTextOutputProbe:
                 "ydotool": "/usr/bin/ydotool",
             }.get(cmd)
             kt = KeycodeTyper()
-            kt._keymap = None
+            kt._lib = None
             with patch(
                 "whisper_anywhere.output.KeycodeTyper", return_value=kt
             ):
@@ -407,7 +419,7 @@ class TestTextOutputProbe:
             patch.object(KeycodeTyper, "_init", return_value=None),
         ):
             kt = KeycodeTyper()
-            kt._keymap = None
+            kt._lib = None
             with patch(
                 "whisper_anywhere.output.KeycodeTyper", return_value=kt
             ):
