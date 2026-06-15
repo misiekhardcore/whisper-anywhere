@@ -343,7 +343,10 @@ class TestKeycodeTyper:
             t._lookup = {0x61: (38, 0), 0x62: (56, 0)}
 
             t.type_text("ab")
-            assert yk.called
+            # 'a' XKB KC=38 → evdev 30, 'b' XKB KC=56 → evdev 48
+            # Expect: ydotool key 30:1 30:0 48:1 48:0
+            yk.assert_any_call((30, 1), (30, 0))
+            yk.assert_any_call((48, 1), (48, 0))
 
     def test_backspace_zero_noop(self) -> None:
         t = KeycodeTyper()
