@@ -1,0 +1,52 @@
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+"""
+body = """
+{%- if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{%- else %}\
+## [Unreleased]
+{%- endif %}\
+
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first() }}
+{% for commit in commits %}
+- {{ commit.message | upper_first() }}
+{%- endfor %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+commit_preprocessors = [
+  { pattern = "\n[\\s\\S]*", replace = "" },
+  { pattern = " *\\(#\\d+\\)", replace = "" },
+  { pattern = "^Initial commit.*", replace = "chore: initial commit" },
+]
+commit_parsers = [
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^test", group = "Testing" },
+  { message = "^ci", group = "Infrastructure" },
+  { message = "^refactor", group = "Changed" },
+  { message = "^bump", group = "Changed" },
+  { message = "^chore", group = "Changed" },
+  { message = "^perf", group = "Performance" },
+  { message = ".*", group = "Changed" },
+]
+filter_commits = false
+tag_pattern = "v[0-9]*"
+skip_tags = "v0\\."
+topo_order = false
+sort_commits = "newest"
