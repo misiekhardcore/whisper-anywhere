@@ -1,4 +1,4 @@
-.PHONY: test test-e2e install install-deps clean build lint format check
+.PHONY: test test-e2e install install-deps clean build lint format check dev
 
 PYTHON ?= $(shell which python3)
 PYTEST ?= $(PYTHON) -m pytest
@@ -34,3 +34,6 @@ format:
 check:
 	ruff format --check .
 	ruff check .
+
+dev:
+	$(PYTHON) -m whisper_anywhere $(ARGS)
