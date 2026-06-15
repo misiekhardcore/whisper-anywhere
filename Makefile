@@ -1,4 +1,4 @@
-.PHONY: test test-e2e install install-deps clean build lint format check dev bump changelog precommit precommit-install
+.PHONY: test test-e2e install install-pkg install-deps clean build lint format check dev bump changelog precommit precommit-install
 
 PYTHON ?= $(shell which python3)
 PYTEST ?= $(PYTHON) -m pytest
@@ -12,6 +12,9 @@ test-e2e:
 install:
 	$(PYTHON) -m pip install --user -e . 2>/dev/null \
 		|| $(PYTHON) -m pip install --user --break-system-packages -e .
+
+install-pkg:
+	$(PYTHON) -m pip install -e .
 
 install-deps:
 	$(PYTHON) -m pip install --user evdev pytest pytest-asyncio build ruff numpy 2>/dev/null; \

@@ -40,7 +40,7 @@ jobs:
         run: make install-deps
 
       - name: Install package
-        run: pip install -e .
+        run: make install-pkg
 
       - name: Run tests
         run: make test
