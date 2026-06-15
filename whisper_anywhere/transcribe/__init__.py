@@ -5,8 +5,6 @@ from .protocol import Transcriber
 from .sensevoice import SENSEVOICE_SUPPORTED_LANGUAGES, SenseVoiceTranscriber
 from .vosk import VoskTranscriber
 
-_MULTILINGUAL_MODEL = "distil-large-v3"
-
 DEFAULT_ENGINE_ID = SenseVoiceTranscriber.ENGINE_ID
 _ENGINES: dict[str, type[Transcriber]] = {}
 _ENGINE_DEFAULTS: dict[str, str] = {}
@@ -53,9 +51,9 @@ def load_engine(
         and not explicit_model
         and model_id == _ENGINE_DEFAULTS.get(engine_id)
     ):
-        model_id = _MULTILINGUAL_MODEL
+        model_id = FasterWhisperTranscriber.MULTILINGUAL_MODEL
         print(
-            f"Switching to multilingual model '{_MULTILINGUAL_MODEL}' "
+            f"Switching to multilingual model '{FasterWhisperTranscriber.MULTILINGUAL_MODEL}' "
             f"for language '{language}'",
             file=sys.stderr,
         )

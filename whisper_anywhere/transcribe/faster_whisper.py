@@ -4,6 +4,7 @@ import sys
 class FasterWhisperTranscriber:
     ENGINE_ID = "faster-whisper"
     DEFAULT_MODEL_ID = "distil-medium.en"
+    MULTILINGUAL_MODEL = "distil-large-v3"
 
     def __init__(
         self, model_id: str = DEFAULT_MODEL_ID, language: str | None = None
