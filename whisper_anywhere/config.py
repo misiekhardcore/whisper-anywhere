@@ -16,6 +16,15 @@ class Config:
     CONFIG_DIR: str = os.path.expanduser("~/.config/whisper-anywhere")
 
     @staticmethod
+    def _get_version() -> str:
+        try:
+            from importlib.metadata import version
+
+            return version("whisper-anywhere")
+        except Exception:
+            return "unknown"
+
+    @staticmethod
     def runtime_dir() -> str:
         base = os.environ.get("XDG_RUNTIME_DIR") or os.path.expanduser("~/.cache")
         path = os.path.join(base, "whisper-anywhere")
@@ -88,6 +97,12 @@ class Config:
     def parse_args() -> argparse.Namespace:
         p = argparse.ArgumentParser(
             description="whisper-anywhere voice dictation daemon"
+        )
+        p.add_argument(
+            "--version",
+            action="version",
+            version=f"whisper-anywhere {Config._get_version()}",
+            help="Show version and exit",
         )
         p.add_argument(
             "--hotkey",
