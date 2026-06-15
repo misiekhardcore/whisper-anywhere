@@ -28,13 +28,11 @@ def runtime_dir() -> str:
 
 def check_deps(engine_id: str = DEFAULT_ENGINE_ID) -> None:
     missing = []
-    for cmd in ("parec", "ydotool"):
-        if not subprocess.run(["which", cmd], capture_output=True).returncode == 0:
-            missing.append(cmd)
+    if not subprocess.run(["which", "parec"], capture_output=True).returncode == 0:
+        missing.append("parec")
     if missing:
         print(f"Missing dependencies: {', '.join(missing)}", file=sys.stderr)
-        print("Run the install script:", file=sys.stderr)
-        print("  bash install.sh", file=sys.stderr)
+        print("Run: sudo apt install pulseaudio-utils", file=sys.stderr)
         sys.exit(1)
     try:
         from evdev import InputDevice  # noqa: F401
