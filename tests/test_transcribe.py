@@ -17,7 +17,7 @@ from whisper_anywhere.transcribe import (
     registered_engines,
 )
 
-# str | None deps may not be installed; provide mock modules so patch targets resolve.
+# Optional deps may not be installed; provide mock modules so patch targets resolve.
 for mod in ("faster_whisper", "funasr", "vosk"):
     if mod not in sys.modules:
         try:
