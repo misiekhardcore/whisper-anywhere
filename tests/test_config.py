@@ -5,6 +5,8 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from whisper_anywhere.config import Config
 
 
@@ -142,6 +144,33 @@ class TestParseArgs:
     def test_vad_zero(self) -> None:
         with patch.object(sys, "argv", ["whisper-anywhere", "--vad=0"]):
             assert Config.parse_args().vad == "0"
+
+
+class TestVersion:
+    def test_version_flag(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch.object(sys, "argv", ["whisper-anywhere", "--version"]):
+            with pytest.raises(SystemExit) as exc:
+                Config.parse_args()
+            assert exc.value.code == 0
+            out: str = capsys.readouterr().out
+            assert "whisper-anywhere" in out
+
+    def test_version_contains_number(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch.object(sys, "argv", ["whisper-anywhere", "--version"]):
+            with pytest.raises(SystemExit):
+                Config.parse_args()
+            out: str = capsys.readouterr().out
+            assert any(c.isdigit() for c in out)
+
+
+class TestGetVersion:
+    def test_success(self) -> None:
+        with patch("importlib.metadata.version", return_value="1.0.0"):
+            assert Config._get_version() == "1.0.0"
+
+    def test_fallback_on_exception(self) -> None:
+        with patch("importlib.metadata.version", side_effect=Exception("no package")):
+            assert Config._get_version() == "unknown"
 
 
 def test_config_dir_constant() -> None:
