@@ -1,4 +1,4 @@
-.PHONY: test test-e2e install install-deps clean build lint format check dev
+.PHONY: test test-e2e install install-deps clean build lint format check dev precommit precommit-install
 
 PYTHON ?= $(shell which python3)
 PYTEST ?= $(PYTHON) -m pytest
@@ -37,3 +37,9 @@ check:
 
 dev:
 	$(PYTHON) -m whisper_anywhere $(ARGS)
+
+precommit: check
+	$(PYTEST) -v tests/
+
+precommit-install:
+	pre-commit install
