@@ -12,13 +12,14 @@ from whisper_anywhere.transcribe import (
     SENSEVOICE_SUPPORTED_LANGUAGES,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
+    VoskTranscriber,
     load_engine,
     register_engine,
     registered_engines,
 )
 
 # Optional deps may not be installed; provide mock modules so patch targets resolve.
-for mod in ("faster_whisper", "funasr"):
+for mod in ("faster_whisper", "funasr", "vosk"):
     if mod not in sys.modules:
         try:
             __import__(mod)
@@ -86,7 +87,7 @@ class TestSenseVoiceTranscriber:
         result: str = t.transcribe("/tmp/t.wav")
         assert result == "hello world"
         mock_auto.return_value.generate.assert_called_once_with(
-            input="/tmp/t.wav", use_itn=True
+            input="/tmp/t.wav", use_itn=True, language=None
         )
 
     @patch("funasr.AutoModel")
@@ -125,6 +126,135 @@ class TestSenseVoiceTranscriber:
         t: SenseVoiceTranscriber = SenseVoiceTranscriber("iic/SenseVoiceSmall")
         result: str = t.transcribe("/tmp/t.wav")
         assert result == "this is a test recording"
+
+
+class TestVoskTranscriber:
+    @patch(
+        "whisper_anywhere.transcribe._resolve_vosk_model",
+        return_value="/fake/vosk/model",
+    )
+    @patch("vosk.Model")
+    def test_init(self, mock_model: MagicMock, mock_resolve: MagicMock) -> None:
+        VoskTranscriber("custom-model", None)
+        mock_resolve.assert_called_once_with("custom-model")
+        mock_model.assert_called_once_with("/fake/vosk/model")
+
+    @patch(
+        "whisper_anywhere.transcribe._resolve_vosk_model",
+        return_value="/fake/vosk/model",
+    )
+    @patch("vosk.Model")
+    @patch("wave.open")
+    @patch("vosk.KaldiRecognizer")
+    def test_transcribe_returns_text(
+        self,
+        mock_kaldi: MagicMock,
+        mock_wave_open: MagicMock,
+        mock_model: MagicMock,
+        mock_resolve: MagicMock,
+    ) -> None:
+        mock_wf: MagicMock = MagicMock()
+        mock_wf.getframerate.return_value = 16000
+        mock_wf.readframes.side_effect = [b"audio data", b""]
+        mock_wave_open.return_value = mock_wf
+
+        mock_rec: MagicMock = MagicMock()
+        mock_rec.AcceptWaveform.return_value = False
+        mock_rec.FinalResult.return_value = '{"text": "Hello world."}'
+        mock_kaldi.return_value = mock_rec
+
+        t: VoskTranscriber = VoskTranscriber("custom-model", None)
+        result: str = t.transcribe("/tmp/t.wav")
+        assert result == "Hello world."
+        mock_kaldi.assert_called_once_with(mock_model.return_value, 16000)
+        mock_rec.AcceptWaveform.assert_called_once_with(b"audio data")
+
+    @patch(
+        "whisper_anywhere.transcribe._resolve_vosk_model",
+        return_value="/fake/vosk/model",
+    )
+    @patch("vosk.Model")
+    @patch("wave.open")
+    @patch("vosk.KaldiRecognizer")
+    def test_transcribe_empty_result(
+        self,
+        mock_kaldi: MagicMock,
+        mock_wave_open: MagicMock,
+        mock_model: MagicMock,
+        mock_resolve: MagicMock,
+    ) -> None:
+        mock_wf: MagicMock = MagicMock()
+        mock_wf.getframerate.return_value = 16000
+        mock_wf.readframes.return_value = b""
+        mock_wave_open.return_value = mock_wf
+
+        mock_rec: MagicMock = MagicMock()
+        mock_rec.FinalResult.return_value = '{"text": ""}'
+        mock_kaldi.return_value = mock_rec
+
+        t: VoskTranscriber = VoskTranscriber("custom-model", None)
+        result: str = t.transcribe("/tmp/t.wav")
+        assert result == ""
+
+    @patch(
+        "whisper_anywhere.transcribe._resolve_vosk_model",
+        return_value="/fake/vosk/model",
+    )
+    @patch("vosk.Model")
+    @patch("wave.open")
+    @patch("vosk.KaldiRecognizer")
+    def test_transcribe_missing_text_key(
+        self,
+        mock_kaldi: MagicMock,
+        mock_wave_open: MagicMock,
+        mock_model: MagicMock,
+        mock_resolve: MagicMock,
+    ) -> None:
+        mock_wf: MagicMock = MagicMock()
+        mock_wf.getframerate.return_value = 16000
+        mock_wf.readframes.side_effect = [b"audio data", b""]
+        mock_wave_open.return_value = mock_wf
+
+        mock_rec: MagicMock = MagicMock()
+        mock_rec.AcceptWaveform.return_value = False
+        mock_rec.FinalResult.return_value = '{"partial": "hello"}'
+        mock_kaldi.return_value = mock_rec
+
+        t: VoskTranscriber = VoskTranscriber("custom-model", None)
+        result: str = t.transcribe("/tmp/t.wav")
+        assert result == ""
+
+    @patch(
+        "whisper_anywhere.transcribe._resolve_vosk_model",
+        return_value="/fake/vosk/model",
+    )
+    @patch("vosk.Model")
+    @patch("wave.open")
+    @patch("vosk.KaldiRecognizer")
+    def test_transcribe_accumulates_multiple_utterances(
+        self,
+        mock_kaldi: MagicMock,
+        mock_wave_open: MagicMock,
+        mock_model: MagicMock,
+        mock_resolve: MagicMock,
+    ) -> None:
+        mock_wf: MagicMock = MagicMock()
+        mock_wf.getframerate.return_value = 16000
+        mock_wf.readframes.side_effect = [b"first", b"second", b""]
+        mock_wave_open.return_value = mock_wf
+
+        mock_rec: MagicMock = MagicMock()
+        mock_rec.AcceptWaveform.side_effect = [True, True]
+        mock_rec.Result.side_effect = [
+            '{"text": "Could"}',
+            '{"text": "you help me with this?"}',
+        ]
+        mock_rec.FinalResult.return_value = '{"text": ""}'
+        mock_kaldi.return_value = mock_rec
+
+        t: VoskTranscriber = VoskTranscriber("custom-model", None)
+        result: str = t.transcribe("/tmp/t.wav")
+        assert result == "Could you help me with this?"
 
 
 class TestLoadModel:
@@ -174,12 +304,13 @@ class TestEngineRegistry:
         engines: list[str] = registered_engines()
         assert "faster-whisper" in engines
         assert "sensevoice" in engines
+        assert "vosk" in engines
 
     def test_register_and_dispatch(self) -> None:
         class _DummyEngine:
             ENGINE_ID: str = "dummy"
 
-            def __init__(self, model_id: str) -> None:
+            def __init__(self, model_id: str, language: Optional[str] = None) -> None:
                 self.model_id = model_id
 
             def transcribe(
@@ -220,7 +351,9 @@ class TestEngineRegistry:
                     (),
                     {
                         "ENGINE_ID": "no-default",
-                        "__init__": lambda self, m: setattr(self, "model_id", m),
+                        "__init__": lambda self, m, language=None: setattr(
+                            self, "model_id", m
+                        ),
                         "transcribe": lambda self, p, language=None: "",
                     },
                 ),
@@ -240,6 +373,9 @@ class TestTranscriberProtocol:
 
     def test_sensevoice_conforms(self) -> None:
         assert isinstance(SenseVoiceTranscriber("iic/SenseVoiceSmall"), Transcriber)
+
+    def test_vosk_conforms(self) -> None:
+        assert isinstance(VoskTranscriber("vosk-model-small-en-us-0.15"), Transcriber)
 
     def test_user_class_conforms(self) -> None:
         class GoodEngine:
@@ -310,6 +446,9 @@ class TestConstants:
 
     def test_sensevoice_default(self) -> None:
         assert SenseVoiceTranscriber.DEFAULT_MODEL_ID == "iic/SenseVoiceSmall"
+
+    def test_vosk_default(self) -> None:
+        assert VoskTranscriber.DEFAULT_MODEL_ID == "vosk-model-en-us-0.22-lgraph"
 
     def test_sensevoice_supported_languages(self) -> None:
         assert SENSEVOICE_SUPPORTED_LANGUAGES == {

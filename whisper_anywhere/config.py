@@ -8,6 +8,7 @@ from whisper_anywhere.transcribe import (
     DEFAULT_ENGINE_ID,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
+    VoskTranscriber,
 )
 from whisper_anywhere.vad import FsmnVAD
 
@@ -59,6 +60,15 @@ def check_deps(engine_id: str = DEFAULT_ENGINE_ID) -> None:
         except ImportError:
             print("Missing funasr. Run: pip3 install --user funasr", file=sys.stderr)
             sys.exit(1)
+    elif engine_id == VoskTranscriber.ENGINE_ID:
+        try:
+            import vosk  # noqa: F401
+        except ImportError:
+            print(
+                "Missing vosk. Run: pip3 install --user vosk",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
 
 def load_config(path: Optional[str] = None) -> dict[str, str]:
@@ -95,7 +105,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--engine",
         default=None,
-        choices=(FasterWhisperTranscriber.ENGINE_ID, SenseVoiceTranscriber.ENGINE_ID),
+        choices=(
+            FasterWhisperTranscriber.ENGINE_ID,
+            SenseVoiceTranscriber.ENGINE_ID,
+            VoskTranscriber.ENGINE_ID,
+        ),
         help="Transcription engine (default: sensevoice)",
     )
     p.add_argument(

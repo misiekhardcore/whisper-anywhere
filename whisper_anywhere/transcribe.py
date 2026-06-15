@@ -1,5 +1,9 @@
+import os
 import re
 import sys
+import urllib.request
+import zipfile
+from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
 _SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
@@ -10,6 +14,9 @@ SENSEVOICE_SUPPORTED_LANGUAGES: frozenset = frozenset(
 
 _MULTILINGUAL_MODEL = "distil-large-v3"
 
+_VOSK_MODEL_CACHE = os.path.join(os.path.expanduser("~/.cache"), "vosk")
+_VOSK_BASE_URL = "https://alphacephei.com/vosk/models"
+
 
 @runtime_checkable
 class Transcriber(Protocol):
@@ -18,7 +25,7 @@ class Transcriber(Protocol):
     ENGINE_ID: str
     DEFAULT_MODEL_ID: str
 
-    def __init__(self, model_id: str) -> None: ...
+    def __init__(self, model_id: str, language: Optional[str] = None) -> None: ...
 
     def transcribe(self, audio_path: str, language: Optional[str] = None) -> str: ...
 
@@ -27,14 +34,20 @@ class FasterWhisperTranscriber:
     ENGINE_ID = "faster-whisper"
     DEFAULT_MODEL_ID = "distil-medium.en"
 
-    def __init__(self, model_id: str = DEFAULT_MODEL_ID):
+    def __init__(
+        self, model_id: str = DEFAULT_MODEL_ID, language: Optional[str] = None
+    ) -> None:
         from faster_whisper import WhisperModel
+
+        self._language = language
 
         print(f"Loading faster-whisper model '{model_id}'...", file=sys.stderr)
         self._model = WhisperModel(model_id, device="cpu", compute_type="int8")
 
     def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
-        segments, _ = self._model.transcribe(audio_path, beam_size=5, language=language)
+        segments, _ = self._model.transcribe(
+            audio_path, beam_size=5, language=language or self._language
+        )
         return " ".join(segment.text.strip() for segment in segments)
 
 
@@ -42,8 +55,12 @@ class SenseVoiceTranscriber:
     ENGINE_ID = "sensevoice"
     DEFAULT_MODEL_ID = "iic/SenseVoiceSmall"
 
-    def __init__(self, model_id: str = DEFAULT_MODEL_ID):
+    def __init__(
+        self, model_id: str = DEFAULT_MODEL_ID, language: Optional[str] = None
+    ) -> None:
         from funasr import AutoModel
+
+        self._language = language
 
         print(f"Loading SenseVoice model '{model_id}'...", file=sys.stderr)
         self._model = AutoModel(model=model_id, device="cpu")
@@ -52,12 +69,81 @@ class SenseVoiceTranscriber:
         kwargs = {"input": audio_path, "use_itn": True}
         if language is not None:
             kwargs["language"] = language
+        else:
+            kwargs["language"] = self._language
         result = self._model.generate(**kwargs)
         if isinstance(result, list) and len(result) > 0:
             text = result[0].get("text", "")
         else:
             text = str(result) if result else ""
         return _SENSEVOICE_TAG_RE.sub("", text).strip()
+
+
+class VoskTranscriber:
+    ENGINE_ID = "vosk"
+    DEFAULT_MODEL_ID = "vosk-model-en-us-0.22-lgraph"
+    DEFAULT_PUNCT_MODEL_PATH = "vosk-recasepunc-en-0.22"
+
+    def __init__(
+        self,
+        model_id: str = DEFAULT_MODEL_ID,
+        language: Optional[str] = None,
+    ):
+        from vosk import Model
+
+        self._language = language
+
+        model_path = _resolve_vosk_model(model_id)
+        print(f"Loading Vosk model '{model_path}'...", file=sys.stderr)
+        self._model = Model(model_path)
+
+    def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
+        import json
+        import wave
+
+        from vosk import KaldiRecognizer
+
+        wf = wave.open(audio_path, "rb")
+        rec = KaldiRecognizer(self._model, wf.getframerate())
+        rec.SetWords(True)
+        rec.SetPartialWords(True)
+        results: list[str] = []
+        while True:
+            data = wf.readframes(4000)
+            if len(data) == 0:
+                break
+            if rec.AcceptWaveform(data):
+                res = json.loads(rec.Result()).get("text", "")
+                if res:
+                    results.append(res)
+        final = json.loads(rec.FinalResult()).get("text", "")
+        if final:
+            results.append(final)
+        wf.close()
+
+        return " ".join(results)
+
+
+def _resolve_vosk_model(model_id: str) -> str:
+    """Resolve a Vosk model ID to a local filesystem path, downloading if needed."""
+    p = Path(model_id)
+    if p.is_dir():
+        return str(p.resolve())
+    cache_path = Path(_VOSK_MODEL_CACHE) / model_id
+    if cache_path.is_dir():
+        return str(cache_path)
+    print(
+        f"Downloading Vosk model '{model_id}' to {cache_path}...",
+        file=sys.stderr,
+    )
+    os.makedirs(_VOSK_MODEL_CACHE, exist_ok=True)
+    url = f"{_VOSK_BASE_URL}/{model_id}.zip"
+    zip_path = cache_path.with_suffix(".zip")
+    urllib.request.urlretrieve(url, zip_path)
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(_VOSK_MODEL_CACHE)
+    zip_path.unlink()
+    return str(cache_path)
 
 
 DEFAULT_ENGINE_ID = SenseVoiceTranscriber.ENGINE_ID
@@ -87,6 +173,9 @@ register_engine(
 )
 register_engine(
     SenseVoiceTranscriber,
+)
+register_engine(
+    VoskTranscriber,
 )
 
 
@@ -130,4 +219,4 @@ def load_engine(
             file=sys.stderr,
         )
 
-    return cls(model_id)
+    return cls(model_id, language)

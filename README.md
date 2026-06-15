@@ -2,7 +2,7 @@
 
 Hold a hotkey, speak, release — text appears in the focused window.
 
-Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, with faster-whisper available as an alternative engine. No cloud API, no data leaves your machine.
+Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, with faster-whisper and Vosk as alternative engines. No cloud API, no data leaves your machine.
 
 > **Language support**: SenseVoice supports explicit language codes `zh`, `en`, `yue`, `ja`, `ko` only (or `auto` for auto-detect). Other languages (e.g. Polish, German) are **not** supported with explicit codes — use the faster-whisper engine for non-English languages that aren't in SenseVoice's limited set.
 
@@ -44,6 +44,8 @@ sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool
 python3 -m pip install --user funasr
 # Optional: faster-whisper for alternative engine
 python3 -m pip install --user faster-whisper
+# Optional: Vosk for lightweight multilingual transcription
+python3 -m pip install --user vosk
 
 # install whisper-anywhere itself
 python3 -m pip install --user -e .
@@ -85,7 +87,7 @@ hotkey=KEY_F12
 # Or omit for Ctrl+Super+Space combo
 # hotkey=
 
-# Engine (sensevoice or faster-whisper)
+# Engine (sensevoice, faster-whisper, or vosk)
 # engine=sensevoice
 
 # Model name (default: iic/SenseVoiceSmall)
@@ -109,8 +111,10 @@ hotkey=KEY_F12
 whisper-anywhere --hotkey KEY_F12       # single-key mode
 whisper-anywhere --hotkey KEY_GRAVE     # use backtick key
 whisper-anywhere --engine faster-whisper
+whisper-anywhere --engine vosk
+whisper-anywhere --model vosk-model-small-en-us-0.15
 whisper-anywhere --model distil-small.en
-whisper-anywhere --language en          # force language (SenseVoice: zh/en/yue/ja/ko; faster-whisper: any ISO 639-1)
+whisper-anywhere --language en          # force language (SenseVoice: zh/en/yue/ja/ko; faster-whisper: any ISO 639-1; Vosk: any ISO 639-1)
 whisper-anywhere --vad                  # live mode with FSMN-VAD
 whisper-anywhere --vad=off              # explicit batch mode
 whisper-anywhere --stdout               # JSON lines output (for opencode plugin)
@@ -120,7 +124,7 @@ whisper-anywhere --stdout               # JSON lines output (for opencode plugin
 
 ## Models
 
-Downloaded automatically on first use. Default engine uses SenseVoice via [FunASR](https://github.com/modelscope/FunASR); alternative engine uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
+Downloaded automatically on first use. Default engine uses SenseVoice via [FunASR](https://github.com/modelscope/FunASR); alternative engines use [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and [Vosk](https://alphacephei.com/vosk/).
 
 ### SenseVoice (default, `--engine sensevoice`)
 
@@ -138,7 +142,30 @@ Downloaded automatically on first use. Default engine uses SenseVoice via [FunAS
 
 Set via config or `--model`. When you request a non-English language without specifying a model, `distil-large-v3` is automatically selected.
 
-> **Performance**: SenseVoiceSmall is 15-17x faster than Whisper on CPU (explicit codes: zh, en, yue, ja, ko). faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU.
+### Vosk (`--engine vosk`)
+
+| Model | Size | Languages |
+|---|---|---|
+| `vosk-model-small-en-us-0.15` | ~40 MB | English |
+| `vosk-model-small-pl-0.22` | ~50 MB | Polish |
+| `vosk-model-small-de-0.15` | ~40 MB | German |
+| `vosk-model-small-fr-0.22` | ~50 MB | French |
+| `vosk-model-small-es-0.22` | ~50 MB | Spanish |
+| `vosk-model-small-pt-0.3` | ~50 MB | Portuguese |
+| `vosk-model-small-ru-0.22` | ~50 MB | Russian |
+| `vosk-model-small-it-0.22` | ~50 MB | Italian |
+| `vosk-model-small-nl-0.22` | ~50 MB | Dutch |
+| `vosk-model-small-tr-0.3` | ~50 MB | Turkish |
+| `vosk-model-small-vn-0.3` | ~50 MB | Vietnamese |
+| `vosk-model-small-ja-0.22` | ~50 MB | Japanese |
+| `vosk-model-small-cn-0.22` | ~50 MB | Chinese |
+| `vosk-model-small-hi-0.22` | ~50 MB | Hindi |
+| `vosk-model-small-ar-0.22` | ~40 MB | Arabic |
+| `vosk-model-small-fa-0.5` | ~50 MB | Persian |
+
+Models are auto-downloaded on first use to `~/.cache/vosk/`. Set the language code (e.g. `pl`, `de`, `fr`) via `--language` or the config file to auto-select the matching model. Alternatively, specify any model name directly with `--model`.
+
+> **Performance**: SenseVoiceSmall is 15-17x faster than Whisper on CPU (explicit codes: zh, en, yue, ja, ko). faster-whisper uses CTranslate2 with int8 quantization, typically 2-4x faster than whisper.cpp on CPU. Vosk is lightweight and efficient on CPU, with small model sizes suited for specific languages.
 
 ## Project layout
 
