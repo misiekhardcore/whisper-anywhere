@@ -16,24 +16,6 @@ _MULTILINGUAL_MODEL = "distil-large-v3"
 
 _VOSK_MODEL_CACHE = os.path.join(os.path.expanduser("~/.cache"), "vosk")
 _VOSK_BASE_URL = "https://alphacephei.com/vosk/models"
-VOSK_LANG_MODELS: dict[str, str] = {
-    "en": "vosk-model-small-en-us-0.15",
-    "pl": "vosk-model-small-pl-0.22",
-    "de": "vosk-model-small-de-0.15",
-    "fr": "vosk-model-small-fr-0.22",
-    "es": "vosk-model-small-es-0.22",
-    "pt": "vosk-model-small-pt-0.3",
-    "ru": "vosk-model-small-ru-0.22",
-    "it": "vosk-model-small-it-0.22",
-    "nl": "vosk-model-small-nl-0.22",
-    "tr": "vosk-model-small-tr-0.3",
-    "vn": "vosk-model-small-vn-0.3",
-    "ja": "vosk-model-small-ja-0.22",
-    "cn": "vosk-model-small-cn-0.22",
-    "hi": "vosk-model-small-hi-0.22",
-    "ar": "vosk-model-small-ar-0.22",
-    "fa": "vosk-model-small-fa-0.5",
-}
 
 
 @runtime_checkable
@@ -43,7 +25,7 @@ class Transcriber(Protocol):
     ENGINE_ID: str
     DEFAULT_MODEL_ID: str
 
-    def __init__(self, model_id: str) -> None: ...
+    def __init__(self, model_id: str, language: Optional[str] = None) -> None: ...
 
     def transcribe(self, audio_path: str, language: Optional[str] = None) -> str: ...
 
@@ -52,14 +34,20 @@ class FasterWhisperTranscriber:
     ENGINE_ID = "faster-whisper"
     DEFAULT_MODEL_ID = "distil-medium.en"
 
-    def __init__(self, model_id: str = DEFAULT_MODEL_ID):
+    def __init__(
+        self, model_id: str = DEFAULT_MODEL_ID, language: Optional[str] = None
+    ) -> None:
         from faster_whisper import WhisperModel
+
+        self._language = language
 
         print(f"Loading faster-whisper model '{model_id}'...", file=sys.stderr)
         self._model = WhisperModel(model_id, device="cpu", compute_type="int8")
 
     def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
-        segments, _ = self._model.transcribe(audio_path, beam_size=5, language=language)
+        segments, _ = self._model.transcribe(
+            audio_path, beam_size=5, language=language or self._language
+        )
         return " ".join(segment.text.strip() for segment in segments)
 
 
@@ -67,8 +55,12 @@ class SenseVoiceTranscriber:
     ENGINE_ID = "sensevoice"
     DEFAULT_MODEL_ID = "iic/SenseVoiceSmall"
 
-    def __init__(self, model_id: str = DEFAULT_MODEL_ID):
+    def __init__(
+        self, model_id: str = DEFAULT_MODEL_ID, language: Optional[str] = None
+    ) -> None:
         from funasr import AutoModel
+
+        self._language = language
 
         print(f"Loading SenseVoice model '{model_id}'...", file=sys.stderr)
         self._model = AutoModel(model=model_id, device="cpu")
@@ -77,6 +69,8 @@ class SenseVoiceTranscriber:
         kwargs = {"input": audio_path, "use_itn": True}
         if language is not None:
             kwargs["language"] = language
+        else:
+            kwargs["language"] = self._language
         result = self._model.generate(**kwargs)
         if isinstance(result, list) and len(result) > 0:
             text = result[0].get("text", "")
@@ -87,10 +81,17 @@ class SenseVoiceTranscriber:
 
 class VoskTranscriber:
     ENGINE_ID = "vosk"
-    DEFAULT_MODEL_ID = "vosk-model-small-en-us-0.15"
+    DEFAULT_MODEL_ID = "vosk-model-en-us-0.22-lgraph"
+    DEFAULT_PUNCT_MODEL_PATH = "vosk-recasepunc-en-0.22"
 
-    def __init__(self, model_id: str = DEFAULT_MODEL_ID):
+    def __init__(
+        self,
+        model_id: str = DEFAULT_MODEL_ID,
+        language: Optional[str] = None,
+    ):
         from vosk import Model
+
+        self._language = language
 
         model_path = _resolve_vosk_model(model_id)
         print(f"Loading Vosk model '{model_path}'...", file=sys.stderr)
@@ -104,14 +105,23 @@ class VoskTranscriber:
 
         wf = wave.open(audio_path, "rb")
         rec = KaldiRecognizer(self._model, wf.getframerate())
+        rec.SetWords(True)
+        rec.SetPartialWords(True)
+        results: list[str] = []
         while True:
             data = wf.readframes(4000)
-            if not data:
+            if len(data) == 0:
                 break
-            rec.AcceptWaveform(data)
-        result = json.loads(rec.FinalResult())
+            if rec.AcceptWaveform(data):
+                res = json.loads(rec.Result()).get("text", "")
+                if res:
+                    results.append(res)
+        final = json.loads(rec.FinalResult()).get("text", "")
+        if final:
+            results.append(final)
         wf.close()
-        return result.get("text", "").strip()
+
+        return " ".join(results)
 
 
 def _resolve_vosk_model(model_id: str) -> str:
@@ -209,4 +219,4 @@ def load_engine(
             file=sys.stderr,
         )
 
-    return cls(model_id)
+    return cls(model_id, language)

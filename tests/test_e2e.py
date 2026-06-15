@@ -279,3 +279,38 @@ async def test_real_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
         f"transcript mismatch: expected ~{norm_expected!r}, got {norm_actual!r} "
         f"(ratio={ratio:.2f})"
     )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_real_e2e_vosk(monkeypatch: pytest.MonkeyPatch) -> None:
+    if not os.environ.get("WHISPER_E2E"):
+        pytest.skip("set WHISPER_E2E=1 to run the real-model e2e")
+
+    sys.modules.pop("vosk", None)
+    pytest.importorskip("vosk")
+    from whisper_anywhere.transcribe import VoskTranscriber
+
+    clips: list[Path] = sorted(FIXTURES.glob("*.wav"))
+    if not clips:
+        pytest.skip("no audio fixture committed yet (see tests/fixtures/README.md)")
+
+    expected: str = (FIXTURES / "transcript.txt").read_text().strip()
+
+    try:
+        model: VoskTranscriber = VoskTranscriber("vosk-model-small-en-us-0.15")
+    except Exception as exc:
+        pytest.skip(f"vosk model unavailable: {exc}")
+
+    text: Optional[str] = await drive_dictation(
+        model, pcm_from_wav(clips[0]), monkeypatch, timeout=120
+    )
+
+    norm_expected: str = _normalize(expected)
+    norm_actual: str = _normalize(text or "")
+    ratio: float = SequenceMatcher(None, norm_expected, norm_actual).ratio()
+    keywords_present: bool = set(norm_expected.split()) <= set(norm_actual.split())
+    assert ratio >= 0.75 or keywords_present, (
+        f"transcript mismatch: expected ~{norm_expected!r}, got {norm_actual!r} "
+        f"(ratio={ratio:.2f})"
+    )
