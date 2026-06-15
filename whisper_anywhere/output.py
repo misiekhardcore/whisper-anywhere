@@ -16,6 +16,20 @@ class Typer(ABC):
 
 
 class WtypeTyper(Typer):
+    @staticmethod
+    def _check_compositor() -> bool:
+        """Return True if the Wayland compositor supports virtual-keyboard protocol."""
+        try:
+            subprocess.run(
+                ["wtype", "-k", "Ctrl"],
+                capture_output=True,
+                timeout=2,
+                check=True,
+            )
+            return True
+        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+            return False
+
     def type_text(self, text: str) -> None:
         if not text:
             return
@@ -38,6 +52,47 @@ class WtypeTyper(Typer):
         except FileNotFoundError:
             print(
                 "wtype not found — install it: sudo apt install wtype",
+                file=sys.stderr,
+            )
+
+
+class ClipboardTyper(Typer):
+    _KEY_LEFTCTRL = 29
+    _KEY_V = 47
+
+    def type_text(self, text: str) -> None:
+        if not text:
+            return
+        # Copy to clipboard
+        try:
+            subprocess.run(["wl-copy", text])
+        except FileNotFoundError:
+            print(
+                "wl-copy not found — install it: sudo apt install wl-clipboard",
+                file=sys.stderr,
+            )
+            return
+        # Simulate Ctrl+V
+        subprocess.run(
+            [
+                "ydotool",
+                "key",
+                f"{self._KEY_LEFTCTRL}:1",
+                f"{self._KEY_V}:1",
+                f"{self._KEY_V}:0",
+                f"{self._KEY_LEFTCTRL}:0",
+            ]
+        )
+
+    def backspace(self, n: int) -> None:
+        if n <= 0:
+            return
+        keys = [f"{YdotoolTyper._KEY_BACKSPACE}:1", f"{YdotoolTyper._KEY_BACKSPACE}:0"] * n
+        try:
+            subprocess.run(["ydotool", "key"] + keys)
+        except FileNotFoundError:
+            print(
+                "ydotool not found — is it installed and on PATH?",
                 file=sys.stderr,
             )
 
@@ -83,8 +138,10 @@ class TextOutput:
 
     @staticmethod
     def _probe_typer() -> Typer | None:
-        if shutil.which("wtype"):
+        if shutil.which("wtype") and WtypeTyper._check_compositor():
             return WtypeTyper()
+        if shutil.which("wl-copy") and shutil.which("ydotool"):
+            return ClipboardTyper()
         if shutil.which("ydotool"):
             return YdotoolTyper()
         return None
@@ -94,9 +151,10 @@ class TextOutput:
             self._typer = self._probe_typer()
             if self._typer is None:
                 print(
-                    "No typing tool found — install wtype (Wayland) or ydotool (X11).",
+                    "No typing tool found — install wl-clipboard or ydotool.",
                     file=sys.stderr,
                 )
+                print("  sudo apt install wl-clipboard", file=sys.stderr)
                 print("  bash install.sh", file=sys.stderr)
                 sys.exit(1)
         return self._typer

@@ -1,9 +1,11 @@
 import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from whisper_anywhere.output import (
+    ClipboardTyper,
     TextOutput,
     Typer,
     WtypeTyper,
@@ -255,6 +257,25 @@ class TestWtypeTyper:
             WtypeTyper().type_text("ąćęłńóśźż")
             run.assert_called_once_with(["wtype", "ąćęłńóśźż"])
 
+    def test_check_compositor_success(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            assert WtypeTyper._check_compositor() is True
+
+    def test_check_compositor_failure(self) -> None:
+        with patch(
+            "whisper_anywhere.output.subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, "wtype"),
+        ):
+            assert WtypeTyper._check_compositor() is False
+
+    def test_check_compositor_not_found(self) -> None:
+        with patch(
+            "whisper_anywhere.output.subprocess.run",
+            side_effect=FileNotFoundError,
+        ):
+            assert WtypeTyper._check_compositor() is False
+
 
 class TestYdotoolTyper:
     def test_type_text_calls_ydotool(self) -> None:
@@ -297,17 +318,88 @@ class TestYdotoolTyper:
             assert "ydotool type failed" in capsys.readouterr().err
 
 
+class TestClipboardTyper:
+    def test_type_text_copies_and_pastes(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            ClipboardTyper().type_text("hello")
+            calls: list[MagicMock] = run.call_args_list
+            assert calls[0].args[0] == ["wl-copy", "hello"]
+            assert calls[1].args[0] == [
+                "ydotool",
+                "key",
+                "29:1",
+                "47:1",
+                "47:0",
+                "29:0",
+            ]
+
+    def test_type_text_skips_empty(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            ClipboardTyper().type_text("")
+            run.assert_not_called()
+
+    def test_backspace(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            ClipboardTyper().backspace(3)
+            run.assert_called_once_with(
+                [
+                    "ydotool",
+                    "key",
+                    "14:1",
+                    "14:0",
+                    "14:1",
+                    "14:0",
+                    "14:1",
+                    "14:0",
+                ]
+            )
+
+    def test_backspace_zero_is_noop(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            ClipboardTyper().backspace(0)
+            run.assert_not_called()
+
+    def test_wl_copy_missing_warns(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch(
+            "whisper_anywhere.output.subprocess.run", side_effect=FileNotFoundError
+        ):
+            ClipboardTyper().type_text("hello")
+            assert "wl-copy not found" in capsys.readouterr().err
+
+
 class TestTextOutputProbe:
     def test_wtype_preferred_over_ydotool(self) -> None:
-        with patch("shutil.which") as which:
+        with (
+            patch("shutil.which") as which,
+            patch.object(WtypeTyper, "_check_compositor", return_value=True),
+        ):
             which.side_effect = lambda cmd: (
                 "/usr/bin/wtype" if cmd == "wtype" else "/usr/bin/ydotool"
             )
             typer: Typer | None = TextOutput._probe_typer()
             assert isinstance(typer, WtypeTyper)
 
-    def test_ydotool_fallback(self) -> None:
-        with patch("shutil.which") as which:
+    def test_wtype_rejected_then_clipboard(self) -> None:
+        with (
+            patch("shutil.which") as which,
+            patch.object(WtypeTyper, "_check_compositor", return_value=False),
+        ):
+            which.side_effect = lambda cmd: {
+                "wtype": "/usr/bin/wtype",
+                "wl-copy": "/usr/bin/wl-copy",
+                "ydotool": "/usr/bin/ydotool",
+            }.get(cmd)
+
+            typer: Typer | None = TextOutput._probe_typer()
+            assert isinstance(typer, ClipboardTyper)
+
+    def test_clipboard_fallback_no_wl_copy(self) -> None:
+        with (
+            patch("shutil.which") as which,
+            patch.object(WtypeTyper, "_check_compositor", return_value=False),
+        ):
             which.side_effect = lambda cmd: (
                 "/usr/bin/ydotool" if cmd == "ydotool" else None
             )

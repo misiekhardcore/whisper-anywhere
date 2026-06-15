@@ -44,19 +44,18 @@ pkg_install() {
 step_system_packages() {
     echo ""
     echo "==> Installing system packages..."
-    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-        info "Wayland detected — installing wtype (unicode-capable typing)"
-        pkg_install \
+    pkg_install \
             pulseaudio-utils \
             python3-evdev \
-            python3-pip \
-            wtype
+            python3-pip
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        info "Wayland detected — installing wtype + wl-clipboard (unicode-capable typing)"
+        pkg_install \
+            wtype \
+            wl-clipboard
     else
         info "X11/TTY — installing ydotool"
         pkg_install \
-            pulseaudio-utils \
-            python3-evdev \
-            python3-pip \
             ydotool
     fi
 }
