@@ -2,17 +2,8 @@ import json
 import shutil
 import subprocess
 import sys
-import time
 from abc import ABC, abstractmethod
-from ctypes import (
-    CDLL,
-    POINTER,
-    byref,
-    c_int,
-    c_uint32,
-    c_void_p,
-    cast,
-)
+from ctypes import CDLL, c_int, c_void_p
 
 
 class Typer(ABC):
@@ -23,9 +14,6 @@ class Typer(ABC):
     @abstractmethod
     def backspace(self, n: int) -> None:
         ...
-
-
-_XKB_KEY_ISO_LEVEL3_SHIFT = 0xFE03
 
 
 def _ydotool_key(*key_val_pairs: tuple[int, int]) -> None:
@@ -50,8 +38,6 @@ class KeycodeTyper(Typer):
 
     def __init__(self) -> None:
         self._lib: CDLL | None = None
-        self._l3_keycode: int | None = None
-        self._lookup: dict[int, int] = {}
         self._init()
 
     def _init(self) -> None:
@@ -59,14 +45,11 @@ class KeycodeTyper(Typer):
             lib = CDLL("libxkbcommon.so.0")
         except OSError:
             return
-
         lib.xkb_context_new.restype = c_void_p
         ctx = lib.xkb_context_new(0)
         if not ctx:
             return
         lib.xkb_context_unref.argtypes = [c_void_p]
-        self._ctx = ctx
-
         lib.xkb_keymap_new_from_names.restype = c_void_p
         lib.xkb_keymap_new_from_names.argtypes = [c_void_p, c_void_p, c_int]
         km = lib.xkb_keymap_new_from_names(ctx, None, 0)
@@ -75,75 +58,26 @@ class KeycodeTyper(Typer):
         lib.xkb_keymap_unref.argtypes = [c_void_p]
         self._lib = lib
 
-        lib.xkb_keymap_min_keycode.restype = c_uint32
-        lib.xkb_keymap_min_keycode.argtypes = [c_void_p]
-        lib.xkb_keymap_max_keycode.restype = c_uint32
-        lib.xkb_keymap_max_keycode.argtypes = [c_void_p]
-        min_kc = lib.xkb_keymap_min_keycode(km)
-        max_kc = lib.xkb_keymap_max_keycode(km)
-
-        lib.xkb_keymap_key_get_syms_by_level.restype = c_int
-        lib.xkb_keymap_key_get_syms_by_level.argtypes = [
-            c_void_p, c_uint32, c_int, c_int, POINTER(c_void_p),
-        ]
-
-        lookup: dict[int, int] = {}
-        l3_kc: int | None = None
-
-        for kc in range(min_kc, max_kc + 1):
-            for level in range(4):
-                syms_out = c_void_p()
-                n = lib.xkb_keymap_key_get_syms_by_level(
-                    km, kc, 0, level, byref(syms_out)
-                )
-                if n > 0 and syms_out.value:
-                    ptr_type = POINTER(c_uint32)
-                    p = cast(syms_out, ptr_type)
-                    for i in range(n):
-                        ks = p[i]
-                        if ks not in lookup:
-                            lookup[ks] = (kc, level)
-                        if ks == _XKB_KEY_ISO_LEVEL3_SHIFT:
-                            l3_kc = kc
-
-        self._lookup = lookup
-        self._l3_keycode = l3_kc
-
-    def _hex_keycode(self, ks: int) -> int | None:
-        entry = self._lookup.get(ks)
-        if entry is not None:
-            kc, level = entry
-            return kc - 8
-        return None
-
-    def _type_unicode_hex(self, keysym: int) -> None:
-        hex_str = format(keysym, "x")
-        _ydotool_key((29, 1), (42, 1), (30, 1), (30, 0), (42, 0), (29, 0))
-        time.sleep(0.02)
-        for ch in hex_str:
-            kc = self._hex_keycode(ord(ch))
-            if kc is not None:
-                _ydotool_key((kc, 1), (kc, 0))
-            time.sleep(0.01)
-        _ydotool_key((57, 1), (57, 0))
-
     def type_text(self, text: str) -> None:
         if not text:
             return
         if self._lib is None:
             _ydotool_type(text)
             return
-        ascii_buf: list[str] = []
+        non_ascii: list[str] = []
         for char in text:
-            if ord(char) < 128:
-                ascii_buf.append(char)
-            else:
-                if ascii_buf:
-                    _ydotool_type("".join(ascii_buf))
-                    ascii_buf.clear()
-                self._type_unicode_hex(ord(char))
-        if ascii_buf:
-            _ydotool_type("".join(ascii_buf))
+            if ord(char) >= 128:
+                non_ascii.append(char)
+        if non_ascii:
+            print(
+                f"Warning: {len(non_ascii)} non-ASCII character(s) "
+                f"cannot be typed on current keyboard layout: "
+                f"{''.join(repr(c) for c in non_ascii)}",
+                file=sys.stderr,
+            )
+        ascii_only = "".join(c for c in text if ord(c) < 128)
+        if ascii_only:
+            _ydotool_type(ascii_only)
 
     def backspace(self, n: int) -> None:
         for _ in range(n):

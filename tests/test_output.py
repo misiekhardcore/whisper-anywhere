@@ -344,22 +344,16 @@ class TestKeycodeTyper:
             t.type_text("hello")
             run.assert_called_once_with(["ydotool", "type", "hello"])
 
-    def test_non_ascii_splits_around_hex_input(self) -> None:
-        with patch.object(KeycodeTyper, "_init", return_value=None):
+    def test_non_ascii_is_dropped_with_warning(self) -> None:
+        with (
+            patch.object(KeycodeTyper, "_init", return_value=None),
+            patch("whisper_anywhere.output.subprocess.run") as run,
+        ):
             t = KeycodeTyper()
             t._lib = object()
-            t._lookup = {0x61: (38, 0), 0x31: (10, 0), 0x20: (65, 0)}
-            with patch("whisper_anywhere.output.subprocess.run") as run:
-                run.return_value = MagicMock(returncode=0)
-                t.type_text("aąb")
-                calls = [
-                    c.args[0]
-                    for c in run.call_args_list
-                    if c.args[0][:2] == ["ydotool", "type"]
-                ]
-                # ASCII before and after non-ASCII 'ą' is flushed separately
-                assert ["ydotool", "type", "a"] in calls
-                assert ["ydotool", "type", "b"] in calls
+            run.return_value = MagicMock(returncode=0)
+            t.type_text("aąb")
+            run.assert_called_once_with(["ydotool", "type", "ab"])
 
     def test_backspace_zero_noop(self) -> None:
         with patch("whisper_anywhere.output.subprocess.run") as run:
