@@ -1,8 +1,5 @@
 import json
-import os
 import shutil
-import socket
-import struct
 import subprocess
 import sys
 import time
@@ -30,45 +27,40 @@ class Typer(ABC):
 
 _XKB_EVDEV_OFFSET = 8
 _XKB_KEY_SHIFT_L = 0xFFE1
-_XKB_KEY_SHIFT_R = 0xFFE2
 _XKB_KEY_ISO_LEVEL3_SHIFT = 0xFE03
 
 
+def _ydotool_key(*key_val_pairs: tuple[int, int]) -> None:
+    args = ["ydotool", "key"]
+    for code, val in key_val_pairs:
+        args.append(f"{code}:{val}")
+    try:
+        subprocess.run(args)
+    except FileNotFoundError:
+        pass
+
+
+def _ydotool_type(text: str) -> None:
+    try:
+        subprocess.run(["ydotool", "type", text])
+    except FileNotFoundError:
+        pass
+
+
 class KeycodeTyper(Typer):
-    _SOCKET_PATHS = [
-        "/tmp/.ydotool_socket",
-    ]
+    _KEY_BACKSPACE = 14
 
     def __init__(self) -> None:
         self._lib: CDLL | None = None
         self._keymap: int | None = None
-        self._socket_path: str | None = None
         self._l3_keycode: int | None = None
         self._lookup: dict[int, tuple[int, int]] = {}
         self._init()
-
-    def _socket_path_candidates(self) -> list[str]:
-        candidates: list[str] = []
-        env = os.environ.get("YDOTOOL_SOCKET")
-        if env:
-            candidates.append(env)
-        xdg = os.environ.get("XDG_RUNTIME_DIR")
-        if xdg:
-            candidates.append(os.path.join(xdg, ".ydotool_socket"))
-        candidates.extend(self._SOCKET_PATHS)
-        return candidates
 
     def _init(self) -> None:
         try:
             lib = CDLL("libxkbcommon.so.0")
         except OSError:
-            return
-
-        for p in self._socket_path_candidates():
-            if os.path.exists(p):
-                self._socket_path = p
-                break
-        if not self._socket_path:
             return
 
         lib.xkb_context_new.restype = c_void_p
@@ -121,90 +113,62 @@ class KeycodeTyper(Typer):
         self._lookup = lookup
         self._l3_keycode = l3_kc
 
-    def _get_kc(self, keysym: int, fallback_xkb: int = 0) -> int:
+    def _get_kc(self, keysym: int) -> int | None:
         entry = self._lookup.get(keysym)
         if entry is not None:
-            return entry[0]
-        return fallback_xkb
+            return entry[0] - _XKB_EVDEV_OFFSET
+        return None
 
-    def _evdev_code(self, xkb_kc: int) -> int:
-        return xkb_kc - _XKB_EVDEV_OFFSET
-
-    def _modifier_codes(self, level: int) -> list[int]:
-        codes: list[int] = []
-        if level == 0:
-            return codes
-        if level == 1:
-            codes.append(self._evdev_code(self._get_kc(_XKB_KEY_SHIFT_L, 50)))
-            return codes
-        if level >= 2 and self._l3_keycode is not None:
-            codes.append(self._evdev_code(self._l3_keycode))
-        if level == 1 or level == 3:
-            codes.append(self._evdev_code(self._get_kc(_XKB_KEY_SHIFT_L, 50)))
-        return codes
-
-    def _send_event(self, ev_type: int, code: int, value: int) -> None:
-        if not self._socket_path:
-            return
-        try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-            sock.settimeout(1)
-            sock.connect(self._socket_path)
-            t = time.time()
-            sec = int(t)
-            usec = int((t - sec) * 1000000)
-            event = struct.pack("llHHi", sec, usec, ev_type, code, value)
-            sock.send(event)
-            syn = struct.pack("llHHi", sec, usec, 0, 0, 0)
-            sock.send(syn)
-            sock.close()
-        except (OSError, struct.error):
-            pass
-
-    def _press_key(self, code: int) -> None:
-        self._send_event(1, code, 1)
-
-    def _release_key(self, code: int) -> None:
-        self._send_event(1, code, 0)
+    def _l3_evdev(self) -> int | None:
+        if self._l3_keycode is not None:
+            return self._l3_keycode - _XKB_EVDEV_OFFSET
+        return None
 
     def _tap_key(self, code: int) -> None:
-        self._press_key(code)
-        time.sleep(0.01)
-        self._release_key(code)
+        _ydotool_key((code, 1), (code, 0))
 
     def _type_key_with_modifiers(self, keycode: int, level: int) -> None:
-        modifiers = self._modifier_codes(level)
-        for m in modifiers:
-            self._press_key(m)
-        time.sleep(0.005)
-        self._tap_key(keycode)
-        for m in reversed(modifiers):
-            self._release_key(m)
+        ev = keycode - _XKB_EVDEV_OFFSET
+        pairs: list[tuple[int, int]] = []
+        if level == 1:
+            pairs.append((42, 1))
+        elif level >= 2:
+            l3 = self._l3_evdev()
+            if l3 is not None:
+                pairs.append((l3, 1))
+        if level == 3:
+            pairs.append((42, 1))
+        pairs.append((ev, 1))
+        pairs.append((ev, 0))
+        if level == 3:
+            pairs.append((42, 0))
+        if level >= 2:
+            l3 = self._l3_evdev()
+            if l3 is not None:
+                pairs.append((l3, 0))
+        if level == 1:
+            pairs.append((42, 0))
+        _ydotool_key(*pairs)
 
     def _type_unicode_hex(self, keysym: int) -> None:
-        lctrl = self._evdev_code(self._get_kc(0xFFE3, 37))
-        lshift = self._evdev_code(self._get_kc(_XKB_KEY_SHIFT_L, 50))
         hex_str = format(keysym, "x")
-        self._press_key(lctrl)
-        self._press_key(lshift)
-        time.sleep(0.005)
-        self._tap_key(self._evdev_code(self._get_kc(0x75, 30)))
-        self._release_key(lshift)
-        self._release_key(lctrl)
-        time.sleep(0.01)
+        _ydotool_key((29, 1), (42, 1))
+        _ydotool_key((30, 1), (30, 0))
+        _ydotool_key((42, 0), (29, 0))
+        time.sleep(0.02)
         for ch in hex_str:
             ks = ord(ch)
             kc = self._get_kc(ks)
-            if kc:
-                self._tap_key(self._evdev_code(kc))
-            time.sleep(0.005)
-        self._tap_key(self._evdev_code(self._get_kc(0x20, 65)))
+            if kc is not None:
+                _ydotool_key((kc, 1), (kc, 0))
+            time.sleep(0.01)
+        _ydotool_key((57, 1), (57, 0))
 
     def type_text(self, text: str) -> None:
         if not text:
             return
         if self._keymap is None:
-            self._ydotool_fallback(text)
+            _ydotool_type(text)
             return
 
         for char in text:
@@ -214,22 +178,13 @@ class KeycodeTyper(Typer):
                 kc, level = entry
                 self._type_key_with_modifiers(kc, level)
             elif ks < 128:
-                self._ydotool_fallback(char)
+                _ydotool_type(char)
             else:
                 self._type_unicode_hex(ks)
 
-    def _ydotool_fallback(self, text: str) -> None:
-        try:
-            subprocess.run(["ydotool", "type", text])
-        except FileNotFoundError:
-            pass
-
     def backspace(self, n: int) -> None:
-        if n <= 0:
-            return
-        ev_code = self._evdev_code(self._get_kc(0xFF08, 22))
         for _ in range(n):
-            self._tap_key(ev_code)
+            _ydotool_key((self._KEY_BACKSPACE, 1), (self._KEY_BACKSPACE, 0))
 
 
 class WtypeTyper(Typer):

@@ -336,17 +336,14 @@ class TestKeycodeTyper:
     def test_type_text_with_init(self) -> None:
         with (
             patch.object(KeycodeTyper, "_init", return_value=None),
-            patch("whisper_anywhere.output.socket.socket") as mock_socket,
+            patch("whisper_anywhere.output._ydotool_key") as yk,
         ):
             t = KeycodeTyper()
-            t._socket_path = "/tmp/test.sock"
             t._keymap = 1
             t._lookup = {0x61: (38, 0), 0x62: (56, 0)}
-            t._lib = None  # Only using socket path
 
             t.type_text("ab")
-            # Should call socket.connect and send events
-            assert mock_socket.return_value.connect.called
+            assert yk.called
 
     def test_backspace_zero_noop(self) -> None:
         t = KeycodeTyper()
