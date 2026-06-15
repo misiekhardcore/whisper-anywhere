@@ -3,6 +3,10 @@ import sys
 
 _SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
 
+SENSEVOICE_SUPPORTED_LANGUAGES: frozenset = frozenset(
+    {"auto", "zh", "en", "yue", "ja", "ko", "nospeech"}
+)
+
 
 class SenseVoiceTranscriber:
     ENGINE_ID = "sensevoice"

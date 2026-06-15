@@ -1,16 +1,9 @@
-import re
 import sys
 
 from .faster_whisper import FasterWhisperTranscriber
 from .protocol import Transcriber
-from .sensevoice import SenseVoiceTranscriber
+from .sensevoice import SENSEVOICE_SUPPORTED_LANGUAGES, SenseVoiceTranscriber
 from .vosk import VoskTranscriber
-
-_SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
-
-SENSEVOICE_SUPPORTED_LANGUAGES: frozenset = frozenset(
-    {"auto", "zh", "en", "yue", "ja", "ko", "nospeech"}
-)
 
 _MULTILINGUAL_MODEL = "distil-large-v3"
 
