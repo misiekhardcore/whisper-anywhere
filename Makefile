@@ -1,4 +1,4 @@
-.PHONY: test test-e2e install install-deps clean build lint format check
+.PHONY: test test-e2e install install-deps clean build lint format check precommit precommit-install
 
 PYTHON ?= $(shell which python3)
 PYTEST ?= $(PYTHON) -m pytest
@@ -34,3 +34,9 @@ format:
 check:
 	ruff format --check .
 	ruff check .
+
+precommit: check
+	$(PYTEST) -v tests/
+
+precommit-install:
+	pre-commit install
