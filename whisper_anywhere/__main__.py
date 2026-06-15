@@ -5,7 +5,7 @@ from argparse import Namespace
 
 from evdev import ecodes
 
-from .config import check_deps, handler, load_config, parse_args
+from .config import Config
 from .daemon import Daemon
 from .lock import Lock
 from .output import TextOutput
@@ -28,7 +28,7 @@ def load_engine(cfg: dict, args: Namespace, language: str | None = None) -> Tran
     from .transcribe import DEFAULT_ENGINE_ID, load_engine
 
     engine_id = args.engine or cfg.get("engine", DEFAULT_ENGINE_ID)
-    check_deps(engine_id)
+    Config.check_deps(engine_id)
     model_id = args.model or cfg.get("model")
     return load_engine(engine_id, model_id, language)
 
@@ -39,18 +39,18 @@ def load_vad(cfg: dict, args: Namespace) -> VAD | None:
     vad_engine_id = args.vad or cfg.get("vad_engine", DEFAULT_VAD_ENGINE)
     if vad_engine_id.lower() in ("off", "false", "0"):
         return None
-    check_deps(vad_engine_id)
+    Config.check_deps(vad_engine_id)
     return load_vad(vad_engine_id)
 
 
 def main():
-    signal.signal(signal.SIGINT, handler)
-    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGINT, Config.handler)
+    signal.signal(signal.SIGTERM, Config.handler)
 
     Lock().acquire()
 
-    args = parse_args()
-    cfg = load_config()
+    args = Config.parse_args()
+    cfg = Config.load_config()
     stdout_mode = (args.stdout or cfg.get("stdout")) in ("1", "true", "yes")
 
     hotkey_code = load_hotkey(cfg, args)

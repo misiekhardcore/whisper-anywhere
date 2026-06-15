@@ -129,7 +129,7 @@ class TestSenseVoiceTranscriber:
 
 class TestVoskTranscriber:
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")
@@ -139,7 +139,7 @@ class TestVoskTranscriber:
         mock_model.assert_called_once_with("/fake/vosk/model")
 
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")
@@ -169,7 +169,7 @@ class TestVoskTranscriber:
         mock_rec.AcceptWaveform.assert_called_once_with(b"audio data")
 
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")
@@ -196,7 +196,7 @@ class TestVoskTranscriber:
         assert result == ""
 
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")
@@ -224,7 +224,7 @@ class TestVoskTranscriber:
         assert result == ""
 
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")

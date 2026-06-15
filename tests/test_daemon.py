@@ -46,9 +46,8 @@ class TestRunDaemonMultiKeyboard:
                 pass
 
         with (
-            patch.object(
-                daemon_module,
-                "find_keyboards",
+            patch(
+                "whisper_anywhere.keyboard.Keyboard.find_keyboards",
                 return_value=[idle_keyboard, used_keyboard],
             ),
             patch("whisper_anywhere.recording.Recorder.start", fake_start),
@@ -89,7 +88,10 @@ class TestRunDaemonLiveMode:
                 pass
 
         with (
-            patch.object(daemon_module, "find_keyboards", return_value=[keyboard]),
+            patch(
+                "whisper_anywhere.keyboard.Keyboard.find_keyboards",
+                return_value=[keyboard],
+            ),
             patch("whisper_anywhere.recording.Recorder.start", fake_start),
             patch("whisper_anywhere.recording.Recorder.finish") as mock_finish,
             patch.object(daemon_module, "stop_recording", lambda proc: None),

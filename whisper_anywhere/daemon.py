@@ -4,7 +4,7 @@ import sys
 from evdev import ecodes
 
 from .audio import stop_recording
-from .keyboard import WANTED_MODS, find_keyboards, keys_held
+from .keyboard import Keyboard
 from .output import TextOutput
 from .recording import Recorder
 from .transcribe import Transcriber
@@ -39,7 +39,7 @@ class Daemon:
 
         while True:
             try:
-                devices = find_keyboards()
+                devices = Keyboard.find_keyboards()
             except RuntimeError as exc:
                 print(f"{exc} — retrying in {KEYBOARD_SCAN_DELAY_S}s", file=sys.stderr)
                 await asyncio.sleep(KEYBOARD_SCAN_DELAY_S)
@@ -69,11 +69,11 @@ class Daemon:
                         continue
 
                     if self._hotkey_code is None:
-                        if event.code not in WANTED_MODS:
+                        if event.code not in Keyboard.WANTED_MODS:
                             continue
                         if event.value == 1:
                             held.add(event.code)
-                            if keys_held(held) and proc is None:
+                            if Keyboard.keys_held(held) and proc is None:
                                 proc, read_task, buffer = await Recorder.start()
                                 if self._vad is not None:
                                     stop_vad, vad_task = self._start_vad_loop(buffer)

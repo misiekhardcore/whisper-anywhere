@@ -2,14 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from evdev import ecodes
 
-from whisper_anywhere.keyboard import (
-    CTRL,
-    SPACE,
-    SUPER,
-    WANTED_MODS,
-    find_keyboards,
-    keys_held,
-)
+from whisper_anywhere.keyboard import Keyboard
 
 
 def _make_device(
@@ -37,7 +30,7 @@ class TestFindKeyboards:
             patch("whisper_anywhere.keyboard.list_devices", return_value=paths),
             patch("whisper_anywhere.keyboard.InputDevice", side_effect=devices),
         ):
-            return find_keyboards()
+            return Keyboard.find_keyboards()
 
     def test_returns_real_keyboard(self) -> None:
         real_kb: MagicMock = _make_device("AT Translated Set 2 keyboard")
@@ -83,56 +76,58 @@ class TestFindKeyboards:
 
 class TestKeysHeld:
     def test_all_mods(self) -> None:
-        held: set[int] = CTRL | SUPER | SPACE
-        assert keys_held(held) is True
+        held: set[int] = Keyboard.CTRL | Keyboard.SUPER | Keyboard.SPACE
+        assert Keyboard.keys_held(held) is True
 
     def test_missing_ctrl(self) -> None:
-        held: set[int] = SUPER | SPACE
-        assert keys_held(held) is False
+        held: set[int] = Keyboard.SUPER | Keyboard.SPACE
+        assert Keyboard.keys_held(held) is False
 
     def test_missing_super(self) -> None:
-        held: set[int] = CTRL | SPACE
-        assert keys_held(held) is False
+        held: set[int] = Keyboard.CTRL | Keyboard.SPACE
+        assert Keyboard.keys_held(held) is False
 
     def test_missing_space(self) -> None:
-        held: set[int] = CTRL | SUPER
-        assert keys_held(held) is False
+        held: set[int] = Keyboard.CTRL | Keyboard.SUPER
+        assert Keyboard.keys_held(held) is False
 
     def test_empty_set(self) -> None:
-        assert keys_held(set()) is False
+        assert Keyboard.keys_held(set()) is False
 
     def test_only_ctrl(self) -> None:
-        assert keys_held(CTRL) is False
+        assert Keyboard.keys_held(Keyboard.CTRL) is False
 
     def test_only_super(self) -> None:
-        assert keys_held(SUPER) is False
+        assert Keyboard.keys_held(Keyboard.SUPER) is False
 
     def test_only_space(self) -> None:
-        assert keys_held(SPACE) is False
+        assert Keyboard.keys_held(Keyboard.SPACE) is False
 
     def test_extra_keys_ignored(self) -> None:
-        held: set[int] = CTRL | SUPER | SPACE | {ecodes.KEY_A, ecodes.KEY_B}
-        assert keys_held(held) is True
+        held: set[int] = (
+            Keyboard.CTRL | Keyboard.SUPER | Keyboard.SPACE | {ecodes.KEY_A, ecodes.KEY_B}
+        )
+        assert Keyboard.keys_held(held) is True
 
 
 class TestConstants:
     def test_wanted_mods_contains_ctrl(self) -> None:
-        assert CTRL.issubset(WANTED_MODS)
+        assert Keyboard.CTRL.issubset(Keyboard.WANTED_MODS)
 
     def test_wanted_mods_contains_super(self) -> None:
-        assert SUPER.issubset(WANTED_MODS)
+        assert Keyboard.SUPER.issubset(Keyboard.WANTED_MODS)
 
     def test_wanted_mods_contains_space(self) -> None:
-        assert SPACE.issubset(WANTED_MODS)
+        assert Keyboard.SPACE.issubset(Keyboard.WANTED_MODS)
 
     def test_ctrl_has_both(self) -> None:
-        assert ecodes.KEY_LEFTCTRL in CTRL
-        assert ecodes.KEY_RIGHTCTRL in CTRL
+        assert ecodes.KEY_LEFTCTRL in Keyboard.CTRL
+        assert ecodes.KEY_RIGHTCTRL in Keyboard.CTRL
 
     def test_super_has_both(self) -> None:
-        assert ecodes.KEY_LEFTMETA in SUPER
-        assert ecodes.KEY_RIGHTMETA in SUPER
+        assert ecodes.KEY_LEFTMETA in Keyboard.SUPER
+        assert ecodes.KEY_RIGHTMETA in Keyboard.SUPER
 
     def test_space_has_one(self) -> None:
-        assert ecodes.KEY_SPACE in SPACE
-        assert len(SPACE) == 1
+        assert ecodes.KEY_SPACE in Keyboard.SPACE
+        assert len(Keyboard.SPACE) == 1

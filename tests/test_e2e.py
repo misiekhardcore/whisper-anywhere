@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 from evdev import ecodes
 
-import whisper_anywhere.daemon as daemon
 from whisper_anywhere.daemon import Daemon
+from whisper_anywhere.keyboard import Keyboard
 from whisper_anywhere.output import TextOutput
 from whisper_anywhere.recording import Recorder
 from whisper_anywhere.transcribe import Transcriber
@@ -64,7 +64,7 @@ async def drive_dictation(
         fake_key_event(ecodes.KEY_F12, 1),
         fake_key_event(ecodes.KEY_F12, 0),
     ]
-    monkeypatch.setattr(daemon, "find_keyboards", lambda: [FakeKeyboard(events)])
+    monkeypatch.setattr(Keyboard, "find_keyboards", lambda: [FakeKeyboard(events)])
 
     async def fake_start() -> tuple[_FakeRecorder, asyncio.Task, bytearray]:
         buffer: bytearray = bytearray(pcm)
@@ -129,7 +129,7 @@ async def drive_dictation_live(
         fake_key_event(ecodes.KEY_F12, 1),
         fake_key_event(ecodes.KEY_F12, 0),
     ]
-    monkeypatch.setattr(daemon, "find_keyboards", lambda: [FakeKeyboard(events)])
+    monkeypatch.setattr(Keyboard, "find_keyboards", lambda: [FakeKeyboard(events)])
 
     async def fake_start() -> tuple[_FakeRecorder, asyncio.Task, bytearray]:
         buffer: bytearray = bytearray(pcm)

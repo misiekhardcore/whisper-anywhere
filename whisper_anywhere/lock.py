@@ -2,9 +2,9 @@ import atexit
 import os
 import sys
 
-from .config import runtime_dir
+from .config import Config
 
-LOCK_PATH = os.path.join(runtime_dir(), "lock")
+LOCK_PATH = os.path.join(Config.runtime_dir(), "lock")
 
 
 class Lock:
