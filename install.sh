@@ -50,8 +50,8 @@ step_system_packages() {
             python3-pip \
             ydotool
     if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-        info "Wayland detected — also installing wtype (faster typing)"
-        pkg_install wtype
+        info "Wayland detected — also installing wtype + wl-clipboard"
+        pkg_install wtype wl-clipboard
     fi
 }
 

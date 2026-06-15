@@ -3,7 +3,6 @@ import shutil
 import subprocess
 import sys
 from abc import ABC, abstractmethod
-from ctypes import CDLL, c_int, c_void_p
 
 
 class Typer(ABC):
@@ -16,72 +15,72 @@ class Typer(ABC):
         ...
 
 
-def _ydotool_key(*key_val_pairs: tuple[int, int]) -> None:
-    args = ["ydotool", "key"]
-    for code, val in key_val_pairs:
-        args.append(f"{code}:{val}")
-    try:
-        subprocess.run(args)
-    except FileNotFoundError:
-        pass
-
-
-def _ydotool_type(text: str) -> None:
-    try:
-        subprocess.run(["ydotool", "type", text])
-    except FileNotFoundError:
-        pass
-
-
-class KeycodeTyper(Typer):
+class ClipboardTyper(Typer):
+    _KEY_LEFTCTRL = 29
+    _KEY_V = 47
     _KEY_BACKSPACE = 14
 
-    def __init__(self) -> None:
-        self._lib: CDLL | None = None
-        self._init()
-
-    def _init(self) -> None:
+    @staticmethod
+    def _save_clipboard() -> str | None:
         try:
-            lib = CDLL("libxkbcommon.so.0")
-        except OSError:
-            return
-        lib.xkb_context_new.restype = c_void_p
-        ctx = lib.xkb_context_new(0)
-        if not ctx:
-            return
-        lib.xkb_context_unref.argtypes = [c_void_p]
-        lib.xkb_keymap_new_from_names.restype = c_void_p
-        lib.xkb_keymap_new_from_names.argtypes = [c_void_p, c_void_p, c_int]
-        km = lib.xkb_keymap_new_from_names(ctx, None, 0)
-        if not km:
-            return
-        lib.xkb_keymap_unref.argtypes = [c_void_p]
-        self._lib = lib
+            r = subprocess.run(
+                ["wl-paste"], capture_output=True, text=True, timeout=2
+            )
+            return r.stdout if r.returncode == 0 else None
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return None
+
+    @staticmethod
+    def _copy(text: str) -> None:
+        try:
+            subprocess.run(["wl-copy", text])
+        except FileNotFoundError:
+            print(
+                "wl-copy not found — install it: sudo apt install wl-clipboard",
+                file=sys.stderr,
+            )
+
+    @staticmethod
+    def _paste() -> None:
+        try:
+            subprocess.run(
+                [
+                    "ydotool",
+                    "key",
+                    f"{ClipboardTyper._KEY_LEFTCTRL}:1",
+                    f"{ClipboardTyper._KEY_V}:1",
+                    f"{ClipboardTyper._KEY_V}:0",
+                    f"{ClipboardTyper._KEY_LEFTCTRL}:0",
+                ]
+            )
+        except FileNotFoundError:
+            print(
+                "ydotool not found — is it installed and on PATH?",
+                file=sys.stderr,
+            )
 
     def type_text(self, text: str) -> None:
         if not text:
             return
-        if self._lib is None:
-            _ydotool_type(text)
-            return
-        non_ascii: list[str] = []
-        for char in text:
-            if ord(char) >= 128:
-                non_ascii.append(char)
-        if non_ascii:
-            print(
-                f"Warning: {len(non_ascii)} non-ASCII character(s) "
-                f"cannot be typed on current keyboard layout: "
-                f"{''.join(repr(c) for c in non_ascii)}",
-                file=sys.stderr,
-            )
-        ascii_only = "".join(c for c in text if ord(c) < 128)
-        if ascii_only:
-            _ydotool_type(ascii_only)
+        saved = self._save_clipboard()
+        self._copy(text)
+        self._paste()
+        if saved is not None:
+            self._copy(saved)
 
     def backspace(self, n: int) -> None:
-        for _ in range(n):
-            _ydotool_key((self._KEY_BACKSPACE, 1), (self._KEY_BACKSPACE, 0))
+        if n <= 0:
+            return
+        try:
+            subprocess.run(
+                ["ydotool", "key"]
+                + [f"{self._KEY_BACKSPACE}:1", f"{self._KEY_BACKSPACE}:0"] * n
+            )
+        except FileNotFoundError:
+            print(
+                "ydotool not found — is it installed and on PATH?",
+                file=sys.stderr,
+            )
 
 
 class WtypeTyper(Typer):
@@ -171,9 +170,8 @@ class TextOutput:
     def _probe_typer() -> Typer | None:
         if shutil.which("wtype") and WtypeTyper._check_compositor():
             return WtypeTyper()
-        keycode = KeycodeTyper()
-        if keycode._lib is not None:
-            return keycode
+        if shutil.which("wl-copy") and shutil.which("ydotool"):
+            return ClipboardTyper()
         if shutil.which("ydotool"):
             return YdotoolTyper()
         return None
@@ -183,7 +181,7 @@ class TextOutput:
             self._typer = self._probe_typer()
             if self._typer is None:
                 print(
-                    "No typing tool found — ensure ydotool is installed and its service is running.",
+                    "No typing tool found — ensure wl-clipboard and ydotool are installed.",
                     file=sys.stderr,
                 )
                 print("  bash install.sh", file=sys.stderr)
