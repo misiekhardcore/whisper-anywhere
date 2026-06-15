@@ -32,9 +32,7 @@ def check_deps(engine_id: str = DEFAULT_ENGINE_ID) -> None:
         missing.append("parec")
     if missing:
         print(f"Missing dependencies: {', '.join(missing)}", file=sys.stderr)
-        print(
-            "Run: sudo apt install pulseaudio-utils", file=sys.stderr
-        )
+        print("Run: sudo apt install pulseaudio-utils", file=sys.stderr)
         sys.exit(1)
     try:
         from evdev import InputDevice  # noqa: F401
