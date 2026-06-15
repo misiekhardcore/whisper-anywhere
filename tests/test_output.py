@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from whisper_anywhere.output import (
-    ClipboardTyper,
+    KeycodeTyper,
     TextOutput,
     Typer,
     WtypeTyper,
@@ -15,7 +15,10 @@ from whisper_anywhere.output import (
 
 @pytest.fixture
 def ydotoool_typer():
-    with patch.object(TextOutput, "_probe_typer", return_value=YdotoolTyper()):
+    with (
+        patch.object(KeycodeTyper, "_init", return_value=None),
+        patch.object(TextOutput, "_probe_typer", return_value=YdotoolTyper()),
+    ):
         yield
 
 
@@ -318,94 +321,94 @@ class TestYdotoolTyper:
             assert "ydotool type failed" in capsys.readouterr().err
 
 
-class TestClipboardTyper:
-    def test_type_text_copies_and_pastes(self) -> None:
-        with patch("whisper_anywhere.output.subprocess.run") as run:
-            run.return_value = MagicMock(returncode=0)
-            ClipboardTyper().type_text("hello")
-            calls: list[MagicMock] = run.call_args_list
-            assert calls[0].args[0] == ["wl-copy", "hello"]
-            assert calls[1].args[0] == [
-                "ydotool",
-                "key",
-                "29:1",
-                "47:1",
-                "47:0",
-                "29:0",
-            ]
-
-    def test_type_text_skips_empty(self) -> None:
-        with patch("whisper_anywhere.output.subprocess.run") as run:
-            ClipboardTyper().type_text("")
-            run.assert_not_called()
-
-    def test_backspace(self) -> None:
-        with patch("whisper_anywhere.output.subprocess.run") as run:
-            run.return_value = MagicMock(returncode=0)
-            ClipboardTyper().backspace(3)
-            run.assert_called_once_with(
-                [
-                    "ydotool",
-                    "key",
-                    "14:1",
-                    "14:0",
-                    "14:1",
-                    "14:0",
-                    "14:1",
-                    "14:0",
-                ]
-            )
-
-    def test_backspace_zero_is_noop(self) -> None:
-        with patch("whisper_anywhere.output.subprocess.run") as run:
-            ClipboardTyper().backspace(0)
-            run.assert_not_called()
-
-    def test_wl_copy_missing_warns(self, capsys: pytest.CaptureFixture[str]) -> None:
-        with patch(
-            "whisper_anywhere.output.subprocess.run", side_effect=FileNotFoundError
+class TestKeycodeTyper:
+    def test_no_keymap_falls_back_to_ydotool(self) -> None:
+        with (
+            patch.object(KeycodeTyper, "_init", return_value=None),
+            patch("whisper_anywhere.output.subprocess.run") as run,
         ):
-            ClipboardTyper().type_text("hello")
-            assert "wl-copy not found" in capsys.readouterr().err
+            t = KeycodeTyper()
+            t._keymap = None
+            run.return_value = MagicMock(returncode=0)
+            t.type_text("hello")
+            run.assert_called_once_with(["ydotool", "type", "hello"])
+
+    def test_type_text_with_init(self) -> None:
+        with (
+            patch.object(KeycodeTyper, "_init", return_value=None),
+            patch("whisper_anywhere.output.socket.socket") as mock_socket,
+        ):
+            t = KeycodeTyper()
+            t._socket_path = "/tmp/test.sock"
+            t._keymap = 1
+            t._lookup = {0x61: (38, 0), 0x62: (56, 0)}
+            t._lib = None  # Only using socket path
+
+            t.type_text("ab")
+            # Should call socket.connect and send events
+            assert mock_socket.return_value.connect.called
+
+    def test_backspace_zero_noop(self) -> None:
+        t = KeycodeTyper()
+        with patch.object(KeycodeTyper, "_tap_key") as tap:
+            t.backspace(0)
+            tap.assert_not_called()
 
 
 class TestTextOutputProbe:
-    def test_wtype_preferred_over_ydotool(self) -> None:
+    def test_wtype_preferred(self) -> None:
         with (
-            patch("shutil.which") as which,
+            patch("shutil.which", return_value="/usr/bin/wtype"),
             patch.object(WtypeTyper, "_check_compositor", return_value=True),
         ):
-            which.side_effect = lambda cmd: (
-                "/usr/bin/wtype" if cmd == "wtype" else "/usr/bin/ydotool"
-            )
             typer: Typer | None = TextOutput._probe_typer()
             assert isinstance(typer, WtypeTyper)
 
-    def test_wtype_rejected_then_clipboard(self) -> None:
+    def test_wtype_rejected_then_keycode(self) -> None:
         with (
             patch("shutil.which") as which,
-            patch.object(WtypeTyper, "_check_compositor", return_value=False),
+            patch.object(KeycodeTyper, "_init", return_value=None),
         ):
             which.side_effect = lambda cmd: {
                 "wtype": "/usr/bin/wtype",
-                "wl-copy": "/usr/bin/wl-copy",
                 "ydotool": "/usr/bin/ydotool",
             }.get(cmd)
+            kt = KeycodeTyper()
+            kt._keymap = 1
+            kt._socket_path = "/tmp/test.sock"
+            with patch(
+                "whisper_anywhere.output.KeycodeTyper", return_value=kt
+            ):
+                with patch.object(WtypeTyper, "_check_compositor", return_value=False):
+                    typer = TextOutput._probe_typer()
+                    assert isinstance(typer, KeycodeTyper)
 
-            typer: Typer | None = TextOutput._probe_typer()
-            assert isinstance(typer, ClipboardTyper)
-
-    def test_clipboard_fallback_no_wl_copy(self) -> None:
+    def test_keycode_fails_then_ydotool(self) -> None:
         with (
             patch("shutil.which") as which,
-            patch.object(WtypeTyper, "_check_compositor", return_value=False),
+            patch.object(KeycodeTyper, "_init", return_value=None),
         ):
-            which.side_effect = lambda cmd: (
-                "/usr/bin/ydotool" if cmd == "ydotool" else None
-            )
-            typer: Typer | None = TextOutput._probe_typer()
-            assert isinstance(typer, YdotoolTyper)
+            which.side_effect = lambda cmd: {
+                "wtype": None,
+                "wl-copy": None,
+                "ydotool": "/usr/bin/ydotool",
+            }.get(cmd)
+            kt = KeycodeTyper()
+            kt._keymap = None
+            with patch(
+                "whisper_anywhere.output.KeycodeTyper", return_value=kt
+            ):
+                typer = TextOutput._probe_typer()
+                assert isinstance(typer, YdotoolTyper)
 
     def test_no_tool_returns_none(self) -> None:
-        with patch("shutil.which", return_value=None):
-            assert TextOutput._probe_typer() is None
+        with (
+            patch("shutil.which", return_value=None),
+            patch.object(KeycodeTyper, "_init", return_value=None),
+        ):
+            kt = KeycodeTyper()
+            kt._keymap = None
+            with patch(
+                "whisper_anywhere.output.KeycodeTyper", return_value=kt
+            ):
+                assert TextOutput._probe_typer() is None

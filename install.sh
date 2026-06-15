@@ -47,16 +47,11 @@ step_system_packages() {
     pkg_install \
             pulseaudio-utils \
             python3-evdev \
-            python3-pip
-    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-        info "Wayland detected — installing wtype + wl-clipboard (unicode-capable typing)"
-        pkg_install \
-            wtype \
-            wl-clipboard
-    else
-        info "X11/TTY — installing ydotool"
-        pkg_install \
+            python3-pip \
             ydotool
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        info "Wayland detected — also installing wtype (faster typing)"
+        pkg_install wtype
     fi
 }
 
