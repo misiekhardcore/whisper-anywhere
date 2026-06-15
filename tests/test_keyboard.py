@@ -105,7 +105,10 @@ class TestKeysHeld:
 
     def test_extra_keys_ignored(self) -> None:
         held: set[int] = (
-            Keyboard.CTRL | Keyboard.SUPER | Keyboard.SPACE | {ecodes.KEY_A, ecodes.KEY_B}
+            Keyboard.CTRL
+            | Keyboard.SUPER
+            | Keyboard.SPACE
+            | {ecodes.KEY_A, ecodes.KEY_B}
         )
         assert Keyboard.keys_held(held) is True
 

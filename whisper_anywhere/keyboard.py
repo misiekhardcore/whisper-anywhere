@@ -40,7 +40,5 @@ class Keyboard:
     @classmethod
     def keys_held(cls, held: set[int]) -> bool:
         return (
-            bool(held & cls.CTRL)
-            and bool(held & cls.SUPER)
-            and bool(held & cls.SPACE)
+            bool(held & cls.CTRL) and bool(held & cls.SUPER) and bool(held & cls.SPACE)
         )
