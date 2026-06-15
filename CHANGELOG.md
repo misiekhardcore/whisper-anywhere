@@ -5,11 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-### Changed
-
-- Add release workflow, CHANGELOG, and make bump target
-## [1.1.0] - 2026-06-15
+## [1.0.0] - 2026-06-15
 ### Added
 
 - Systemd user service autostart + uninstall script + doc fixes
@@ -17,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Add release workflow, CHANGELOG, and make bump target
 - Drop Python 3.9 support, require >=3.10
 - Add Vosk as a transcription engine
 - Add pre-commit hooks for linting and tests
@@ -33,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Send SIGINT to parec instead of SIGTERM so it finalizes WAV file properly
 - Replace whisper.cpp with faster-whisper (distil-large-v3)
 - Remove fragile evdev grab — combo mode works without intercept
+- Initial commit
 
 ### Documentation
 
@@ -56,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 
 - End-to-end dictation pipeline test
-## [1.0.0] - 2026-06-11
+## [0.1.0] - 2026-06-11
 ### Changed
 
 - Initial commit
