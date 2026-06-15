@@ -1,5 +1,4 @@
 import sys
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,7 +17,7 @@ from whisper_anywhere.transcribe import (
     registered_engines,
 )
 
-# Optional deps may not be installed; provide mock modules so patch targets resolve.
+# str | None deps may not be installed; provide mock modules so patch targets resolve.
 for mod in ("faster_whisper", "funasr", "vosk"):
     if mod not in sys.modules:
         try:
@@ -310,12 +309,10 @@ class TestEngineRegistry:
         class _DummyEngine:
             ENGINE_ID: str = "dummy"
 
-            def __init__(self, model_id: str, language: Optional[str] = None) -> None:
+            def __init__(self, model_id: str, language: str | None = None) -> None:
                 self.model_id = model_id
 
-            def transcribe(
-                self, audio_path: str, language: Optional[str] = None
-            ) -> str:
+            def transcribe(self, audio_path: str, language: str | None = None) -> str:
                 return f"dummy:{self.model_id}:{audio_path}"
 
         saved: tuple[dict[str, Transcriber], dict[str, str]] = (
@@ -384,7 +381,7 @@ class TestTranscriberProtocol:
 
             def __init__(self, model_id: str) -> None: ...
             def transcribe(
-                self, audio_path: str, language: Optional[str] = None
+                self, audio_path: str, language: str | None = None
             ) -> str: ...
 
         assert isinstance(GoodEngine("x"), Transcriber)

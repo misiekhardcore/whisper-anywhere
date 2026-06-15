@@ -2,7 +2,6 @@ import argparse
 import os
 import subprocess
 import sys
-from typing import Optional
 
 from whisper_anywhere.transcribe import (
     DEFAULT_ENGINE_ID,
@@ -45,33 +44,36 @@ def check_deps(engine_id: str = DEFAULT_ENGINE_ID) -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-    if engine_id == FasterWhisperTranscriber.ENGINE_ID:
-        try:
-            from faster_whisper import WhisperModel  # noqa: F401
-        except ImportError:
-            print(
-                "Missing faster-whisper. Run: pip3 install --user faster-whisper",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-    elif engine_id in (SenseVoiceTranscriber.ENGINE_ID, FsmnVAD.ENGINE_ID):
-        try:
-            import funasr  # noqa: F401
-        except ImportError:
-            print("Missing funasr. Run: pip3 install --user funasr", file=sys.stderr)
-            sys.exit(1)
-    elif engine_id == VoskTranscriber.ENGINE_ID:
-        try:
-            import vosk  # noqa: F401
-        except ImportError:
-            print(
-                "Missing vosk. Run: pip3 install --user vosk",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+    match engine_id:
+        case FasterWhisperTranscriber.ENGINE_ID:
+            try:
+                from faster_whisper import WhisperModel  # noqa: F401
+            except ImportError:
+                print(
+                    "Missing faster-whisper. Run: pip3 install --user faster-whisper",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        case SenseVoiceTranscriber.ENGINE_ID | FsmnVAD.ENGINE_ID:
+            try:
+                import funasr  # noqa: F401
+            except ImportError:
+                print(
+                    "Missing funasr. Run: pip3 install --user funasr", file=sys.stderr
+                )
+                sys.exit(1)
+        case VoskTranscriber.ENGINE_ID:
+            try:
+                import vosk  # noqa: F401
+            except ImportError:
+                print(
+                    "Missing vosk. Run: pip3 install --user vosk",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
 
 
-def load_config(path: Optional[str] = None) -> dict[str, str]:
+def load_config(path: str | None = None) -> dict[str, str]:
     if path is None:
         path = os.path.join(CONFIG_DIR, "config")
     cfg: dict[str, str] = {}
@@ -128,5 +130,5 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def handler(signum: int, frame: Optional[object]) -> None:
+def handler(signum: int, frame: object | None) -> None:
     raise SystemExit(0)

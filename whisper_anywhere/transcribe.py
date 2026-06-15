@@ -4,7 +4,7 @@ import sys
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 _SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]+\|>\s*")
 
@@ -25,9 +25,9 @@ class Transcriber(Protocol):
     ENGINE_ID: str
     DEFAULT_MODEL_ID: str
 
-    def __init__(self, model_id: str, language: Optional[str] = None) -> None: ...
+    def __init__(self, model_id: str, language: str | None = None) -> None: ...
 
-    def transcribe(self, audio_path: str, language: Optional[str] = None) -> str: ...
+    def transcribe(self, audio_path: str, language: str | None = None) -> str: ...
 
 
 class FasterWhisperTranscriber:
@@ -35,7 +35,7 @@ class FasterWhisperTranscriber:
     DEFAULT_MODEL_ID = "distil-medium.en"
 
     def __init__(
-        self, model_id: str = DEFAULT_MODEL_ID, language: Optional[str] = None
+        self, model_id: str = DEFAULT_MODEL_ID, language: str | None = None
     ) -> None:
         from faster_whisper import WhisperModel
 
@@ -44,7 +44,7 @@ class FasterWhisperTranscriber:
         print(f"Loading faster-whisper model '{model_id}'...", file=sys.stderr)
         self._model = WhisperModel(model_id, device="cpu", compute_type="int8")
 
-    def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
+    def transcribe(self, audio_path: str, language: str | None = None) -> str:
         segments, _ = self._model.transcribe(
             audio_path, beam_size=5, language=language or self._language
         )
@@ -56,7 +56,7 @@ class SenseVoiceTranscriber:
     DEFAULT_MODEL_ID = "iic/SenseVoiceSmall"
 
     def __init__(
-        self, model_id: str = DEFAULT_MODEL_ID, language: Optional[str] = None
+        self, model_id: str = DEFAULT_MODEL_ID, language: str | None = None
     ) -> None:
         from funasr import AutoModel
 
@@ -65,7 +65,7 @@ class SenseVoiceTranscriber:
         print(f"Loading SenseVoice model '{model_id}'...", file=sys.stderr)
         self._model = AutoModel(model=model_id, device="cpu")
 
-    def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
+    def transcribe(self, audio_path: str, language: str | None = None) -> str:
         kwargs = {"input": audio_path, "use_itn": True}
         if language is not None:
             kwargs["language"] = language
@@ -87,7 +87,7 @@ class VoskTranscriber:
     def __init__(
         self,
         model_id: str = DEFAULT_MODEL_ID,
-        language: Optional[str] = None,
+        language: str | None = None,
     ):
         from vosk import Model
 
@@ -97,7 +97,7 @@ class VoskTranscriber:
         print(f"Loading Vosk model '{model_path}'...", file=sys.stderr)
         self._model = Model(model_path)
 
-    def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
+    def transcribe(self, audio_path: str, language: str | None = None) -> str:
         import json
         import wave
 
@@ -151,9 +151,7 @@ _ENGINES: dict[str, type[Transcriber]] = {}
 _ENGINE_DEFAULTS: dict[str, str] = {}
 
 
-def register_engine(
-    cls: type[Transcriber], default_model: Optional[str] = None
-) -> None:
+def register_engine(cls: type[Transcriber], default_model: str | None = None) -> None:
     _ENGINES[cls.ENGINE_ID] = cls
     resolved = (
         default_model
@@ -180,9 +178,9 @@ register_engine(
 
 
 def load_engine(
-    engine_id: Optional[str] = DEFAULT_ENGINE_ID,
-    model_id: Optional[str] = None,
-    language: Optional[str] = None,
+    engine_id: str | None = DEFAULT_ENGINE_ID,
+    model_id: str | None = None,
+    language: str | None = None,
 ) -> Transcriber:
     if engine_id not in _ENGINES:
         raise ValueError(

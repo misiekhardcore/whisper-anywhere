@@ -2,7 +2,6 @@ import asyncio
 import signal
 import sys
 from argparse import Namespace
-from typing import Optional
 
 from evdev import ecodes
 
@@ -14,9 +13,9 @@ from .transcribe import Transcriber
 from .vad import VAD
 
 
-def load_hotkey(cfg: dict, args: Namespace) -> Optional[int]:
+def load_hotkey(cfg: dict, args: Namespace) -> int | None:
     hotkey_arg = args.hotkey or cfg.get("hotkey")
-    hotkey_code: Optional[int] = None
+    hotkey_code: int | None = None
     if hotkey_arg:
         hotkey_code = getattr(ecodes, hotkey_arg, None)
         if hotkey_code is None:
@@ -25,9 +24,7 @@ def load_hotkey(cfg: dict, args: Namespace) -> Optional[int]:
     return hotkey_code
 
 
-def load_engine(
-    cfg: dict, args: Namespace, language: Optional[str] = None
-) -> Transcriber:
+def load_engine(cfg: dict, args: Namespace, language: str | None = None) -> Transcriber:
     from .transcribe import DEFAULT_ENGINE_ID, load_engine
 
     engine_id = args.engine or cfg.get("engine", DEFAULT_ENGINE_ID)
@@ -36,7 +33,7 @@ def load_engine(
     return load_engine(engine_id, model_id, language)
 
 
-def load_vad(cfg: dict, args: Namespace) -> Optional[VAD]:
+def load_vad(cfg: dict, args: Namespace) -> VAD | None:
     from .vad import DEFAULT_VAD_ENGINE, load_vad
 
     vad_engine_id = args.vad or cfg.get("vad_engine", DEFAULT_VAD_ENGINE)

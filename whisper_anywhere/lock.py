@@ -1,7 +1,6 @@
 import atexit
 import os
 import sys
-from typing import Optional
 
 from .config import runtime_dir
 
@@ -10,7 +9,7 @@ LOCK_PATH = os.path.join(runtime_dir(), "lock")
 
 class Lock:
     def __init__(self) -> None:
-        self._fd: Optional[int] = None
+        self._fd: int | None = None
 
     def acquire(self) -> None:
         try:

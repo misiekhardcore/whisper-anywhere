@@ -2,7 +2,6 @@ import asyncio
 import os
 import signal
 import wave
-from typing import Optional
 
 from .config import runtime_dir
 
@@ -22,7 +21,7 @@ MAX_RECORDING_BYTES = SAMPLE_RATE * SAMPLE_WIDTH * CHANNELS * MAX_RECORDING_SECO
 AUDIO = os.path.join(runtime_dir(), "audio.wav")
 
 
-def stop_recording(proc: Optional["asyncio.subprocess.Process"]) -> None:
+def stop_recording(proc: "asyncio.subprocess.Process | None") -> None:
     """SIGINT parec so it flushes its buffer; safe to call more than once."""
     try:
         proc.send_signal(signal.SIGINT)

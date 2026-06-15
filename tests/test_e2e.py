@@ -7,7 +7,6 @@ import types
 import wave
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Optional
 
 import pytest
 from evdev import ecodes
@@ -60,7 +59,7 @@ async def drive_dictation(
     pcm: bytes,
     monkeypatch: pytest.MonkeyPatch,
     timeout: int = 30,
-) -> Optional[str]:
+) -> str | None:
     events: list[types.SimpleNamespace] = [
         fake_key_event(ecodes.KEY_F12, 1),
         fake_key_event(ecodes.KEY_F12, 0),
@@ -80,7 +79,7 @@ async def drive_dictation(
     output: TextOutput = TextOutput(True)
     original_emit = output.emit
 
-    def capturing_emit(text: Optional[str]) -> None:
+    def capturing_emit(text: str | None) -> None:
         original_emit(text)
         if not done.done():
             done.set_result(text)
@@ -107,7 +106,7 @@ class StubModel:
     def __init__(self, text: str) -> None:
         self._text = text
 
-    def transcribe(self, path: str, language: Optional[str] = None) -> str:
+    def transcribe(self, path: str, language: str | None = None) -> str:
         return self._text
 
 
@@ -125,7 +124,7 @@ async def drive_dictation_live(
     vad: VAD,
     monkeypatch: pytest.MonkeyPatch,
     timeout: int = 30,
-) -> Optional[str]:
+) -> str | None:
     events: list[types.SimpleNamespace] = [
         fake_key_event(ecodes.KEY_F12, 1),
         fake_key_event(ecodes.KEY_F12, 0),
@@ -170,9 +169,7 @@ async def test_stub_e2e(
 ) -> None:
     pcm: bytes = b"\x00\x01" * 8000
 
-    text: Optional[str] = await drive_dictation(
-        StubModel("hello world"), pcm, monkeypatch
-    )
+    text: str | None = await drive_dictation(StubModel("hello world"), pcm, monkeypatch)
 
     assert text == "hello world"
     out: str = capsys.readouterr().out.strip().splitlines()[-1]
@@ -185,7 +182,7 @@ async def test_stub_e2e_live_vad(
 ) -> None:
     pcm: bytes = b"\x00\x01" * 8000
 
-    text: Optional[str] = await drive_dictation_live(
+    text: str | None = await drive_dictation_live(
         StubModel("hello world"), pcm, StubVAD(), monkeypatch
     )
 
@@ -223,7 +220,7 @@ async def test_real_e2e_live_vad(monkeypatch: pytest.MonkeyPatch) -> None:
     except Exception as exc:
         pytest.skip(f"VAD model unavailable: {exc}")
 
-    text: Optional[str] = await drive_dictation_live(
+    text: str | None = await drive_dictation_live(
         model, pcm_from_wav(clips[0]), vad, monkeypatch, timeout=120
     )
 
@@ -238,7 +235,7 @@ async def test_real_e2e_live_vad(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.integration
-def test_install_artifacts(installed_app: Optional[object]) -> None:
+def test_install_artifacts(installed_app: object | None) -> None:
     if installed_app is None:
         pytest.skip("set WHISPER_E2E_INSTALL=1 to exercise install.sh/uninstall.sh")
     assert installed_app.bin.exists()
@@ -267,7 +264,7 @@ async def test_real_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
     except Exception as exc:
         pytest.skip(f"tiny.en model unavailable: {exc}")
 
-    text: Optional[str] = await drive_dictation(
+    text: str | None = await drive_dictation(
         model, pcm_from_wav(clips[0]), monkeypatch, timeout=120
     )
 
@@ -302,7 +299,7 @@ async def test_real_e2e_vosk(monkeypatch: pytest.MonkeyPatch) -> None:
     except Exception as exc:
         pytest.skip(f"vosk model unavailable: {exc}")
 
-    text: Optional[str] = await drive_dictation(
+    text: str | None = await drive_dictation(
         model, pcm_from_wav(clips[0]), monkeypatch, timeout=120
     )
 

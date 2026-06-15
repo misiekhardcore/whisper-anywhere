@@ -1,7 +1,6 @@
 import json
 import subprocess
 import sys
-from typing import Optional
 
 _YDOTOOL_KEY_BACKSPACE = 14
 
@@ -10,7 +9,7 @@ class TextOutput:
     def __init__(self, stdout_mode: bool) -> None:
         self._stdout_mode = stdout_mode
 
-    def emit(self, text: Optional[str]) -> None:
+    def emit(self, text: str | None) -> None:
         if not text:
             return
         if self._stdout_mode:

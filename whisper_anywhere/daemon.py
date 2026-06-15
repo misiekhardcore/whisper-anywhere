@@ -1,6 +1,5 @@
 import asyncio
 import sys
-from typing import Optional
 
 from evdev import ecodes
 
@@ -20,11 +19,11 @@ _RESCAN = object()
 class Daemon:
     def __init__(
         self,
-        hotkey_code: Optional[int],
+        hotkey_code: int | None,
         engine: Transcriber,
         output: TextOutput,
-        language: Optional[str],
-        vad: Optional[VAD],
+        language: str | None,
+        vad: VAD | None,
     ) -> None:
         self._hotkey_code = hotkey_code
         self._engine = engine
