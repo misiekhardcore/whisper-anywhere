@@ -112,6 +112,18 @@ sys.stderr.write('Model $MODEL ready.\n')
 " 2>/dev/null || warn "model pre-load skipped (will download on first use)"
 }
 
+step_vad_model() {
+    echo ""
+    echo "==> Pre-loading VAD model (fsmn-vad)..."
+    "$PYTHON" -c "
+from funasr import AutoModel
+import sys
+sys.stderr.write('Downloading VAD model fsmn-vad...\n')
+m = AutoModel(model='fsmn-vad', device='cpu')
+sys.stderr.write('VAD model fsmn-vad ready.\n')
+" 2>/dev/null || warn "VAD model pre-load skipped (will download on first use)"
+}
+
 step_install_package() {
     echo ""
     echo "==> Installing whisper-anywhere package..."
@@ -176,6 +188,12 @@ step_config() {
 #
 # Uncomment to force a language (default: auto-detect):
 # language=en
+#
+# VAD engine for live streaming (fsmn-vad):
+# vad_engine=fsmn-vad
+#
+# Set vad=off to disable live streaming (batch mode):
+# vad=off
 EOF
         if [ -n "$HOTKEY" ]; then
             echo "hotkey=$HOTKEY" >> "$CONFIG_DIR/config"
@@ -222,6 +240,18 @@ summary() {
 # main
 # ---------------------------------------------------------------------------
 
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    echo "Usage: bash install.sh"
+    echo ""
+    echo "Installs whisper-anywhere and its dependencies."
+    echo ""
+    echo "Environment variables:"
+    echo "  MODEL    SenseVoice model name  (default: iic/SenseVoiceSmall)"
+    echo "  HOTKEY   Single key like KEY_F12  (default: none → Ctrl+Super+Space combo)"
+    echo "  PYTHON   Python interpreter path  (default: python3 from PATH)"
+    exit 0
+fi
+
 echo ""
 echo "  whisper-anywhere installer"
 echo "  ========================="
@@ -234,6 +264,7 @@ step_ydotool_service
 step_python_packages
 step_install_package
 step_model
+step_vad_model
 step_config
 step_service
 summary
