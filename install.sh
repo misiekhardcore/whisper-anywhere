@@ -44,18 +44,20 @@ pkg_install() {
 step_system_packages() {
     echo ""
     echo "==> Installing system packages..."
-    pkg_install \
-        pulseaudio-utils \
-        python3-evdev \
-        python3-pip \
-        ydotool
-
-    # wl-clipboard is optional but useful
-    if command -v wl-copy &>/dev/null; then
-        info "wl-clipboard already installed"
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        info "Wayland detected — installing wtype (unicode-capable typing)"
+        pkg_install \
+            pulseaudio-utils \
+            python3-evdev \
+            python3-pip \
+            wtype
     else
-        info "installing wl-clipboard (optional, for clipboard-based typing fallback)"
-        pkg_install wl-clipboard || true
+        info "X11/TTY — installing ydotool"
+        pkg_install \
+            pulseaudio-utils \
+            python3-evdev \
+            python3-pip \
+            ydotool
     fi
 }
 
@@ -260,7 +262,11 @@ need_root
 step_system_packages
 step_bridge_system_packages
 step_input_group
-step_ydotool_service
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    step_ydotool_service
+else
+    info "skipping ydotool service (using wtype on Wayland)"
+fi
 step_python_packages
 step_install_package
 step_model

@@ -3,9 +3,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from whisper_anywhere.output import TextOutput
+from whisper_anywhere.output import (
+    TextOutput,
+    Typer,
+    WtypeTyper,
+    YdotoolTyper,
+)
 
 
+@pytest.fixture
+def ydotoool_typer():
+    with patch.object(TextOutput, "_probe_typer", return_value=YdotoolTyper()):
+        yield
+
+
+@pytest.mark.usefixtures("ydotoool_typer")
 class TestEmit:
     def test_empty_text_is_noop(self) -> None:
         with patch("whisper_anywhere.output.subprocess.run") as run:
@@ -63,6 +75,7 @@ class TestCommonPrefixLen:
         assert TextOutput._common_prefix_len("héllo", "héy") == 2
 
 
+@pytest.mark.usefixtures("ydotoool_typer")
 class TestEmitPartial:
     def test_noop_when_prev_equals_new(self) -> None:
         with patch("whisper_anywhere.output.subprocess.run") as run:
@@ -125,6 +138,7 @@ class TestEmitPartial:
             assert calls[0][0][0] == ["ydotool", "key"] + backspace_keys
 
 
+@pytest.mark.usefixtures("ydotoool_typer")
 class TestEmitFinal:
     def test_stdout_json_shape(self, capsys: pytest.CaptureFixture[str]) -> None:
         TextOutput(True).emit_final("old", "final text")
@@ -195,3 +209,111 @@ class TestEmitFinal:
         ):
             TextOutput(False).emit_final("old", "final")
             assert "ydotool not found" in capsys.readouterr().err
+
+
+class TestWtypeTyper:
+    def test_type_text_calls_wtype(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            WtypeTyper().type_text("zażółć")
+            run.assert_called_once_with(["wtype", "zażółć"])
+
+    def test_type_text_skips_empty(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            WtypeTyper().type_text("")
+            run.assert_not_called()
+
+    def test_backspace(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            WtypeTyper().backspace(3)
+            run.assert_called_once_with(
+                ["wtype", "-k", "BackSpace", "-k", "BackSpace", "-k", "BackSpace"]
+            )
+
+    def test_backspace_zero_is_noop(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            WtypeTyper().backspace(0)
+            run.assert_not_called()
+
+    def test_type_text_failure_warns(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=1)
+            WtypeTyper().type_text("hello")
+            assert "wtype failed" in capsys.readouterr().err
+
+    def test_type_text_missing_warns(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch(
+            "whisper_anywhere.output.subprocess.run", side_effect=FileNotFoundError
+        ):
+            WtypeTyper().type_text("hello")
+            assert "wtype not found" in capsys.readouterr().err
+
+    def test_unicode_diacritics(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            WtypeTyper().type_text("ąćęłńóśźż")
+            run.assert_called_once_with(["wtype", "ąćęłńóśźż"])
+
+
+class TestYdotoolTyper:
+    def test_type_text_calls_ydotool(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            YdotoolTyper().type_text("hello")
+            run.assert_called_once_with(["ydotool", "type", "hello"])
+
+    def test_type_text_skips_empty(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            YdotoolTyper().type_text("")
+            run.assert_not_called()
+
+    def test_backspace(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            YdotoolTyper().backspace(3)
+            run.assert_called_once_with(
+                [
+                    "ydotool",
+                    "key",
+                    "14:1",
+                    "14:0",
+                    "14:1",
+                    "14:0",
+                    "14:1",
+                    "14:0",
+                ]
+            )
+
+    def test_backspace_zero_is_noop(self) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            YdotoolTyper().backspace(0)
+            run.assert_not_called()
+
+    def test_type_text_failure_warns(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with patch("whisper_anywhere.output.subprocess.run") as run:
+            run.return_value = MagicMock(returncode=1)
+            YdotoolTyper().type_text("hello")
+            assert "ydotool type failed" in capsys.readouterr().err
+
+
+class TestTextOutputProbe:
+    def test_wtype_preferred_over_ydotool(self) -> None:
+        with patch("shutil.which") as which:
+            which.side_effect = lambda cmd: (
+                "/usr/bin/wtype" if cmd == "wtype" else "/usr/bin/ydotool"
+            )
+            typer: Typer | None = TextOutput._probe_typer()
+            assert isinstance(typer, WtypeTyper)
+
+    def test_ydotool_fallback(self) -> None:
+        with patch("shutil.which") as which:
+            which.side_effect = lambda cmd: (
+                "/usr/bin/ydotool" if cmd == "ydotool" else None
+            )
+            typer: Typer | None = TextOutput._probe_typer()
+            assert isinstance(typer, YdotoolTyper)
+
+    def test_no_tool_returns_none(self) -> None:
+        with patch("shutil.which", return_value=None):
+            assert TextOutput._probe_typer() is None
