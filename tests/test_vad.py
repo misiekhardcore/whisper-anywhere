@@ -2,13 +2,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from whisper_anywhere.vad import (
-    VAD,
-    FsmnVAD,
-    _merge_overlapping,
-    _parse_vad_result,
-    load_vad,
-)
+from whisper_anywhere.vad import VAD, FsmnVAD, load_vad
+from whisper_anywhere.vad.fsmn import _merge_overlapping, _parse_vad_result
 
 
 class TestParseVadResult:

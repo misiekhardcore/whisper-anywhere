@@ -3,7 +3,7 @@ import os
 import signal
 import wave
 
-from .config import runtime_dir
+from .config import Config
 
 # Fixed requirements for whisper.cpp input — not device-native parameters.
 # parec is told to convert to this format regardless of the microphone's native rate.
@@ -18,7 +18,7 @@ MAX_RECORDING_SECONDS = 60
 MAX_RECORDING_BYTES = SAMPLE_RATE * SAMPLE_WIDTH * CHANNELS * MAX_RECORDING_SECONDS
 
 # Per-user runtime dir (0700) instead of world-writable /tmp.
-AUDIO = os.path.join(runtime_dir(), "audio.wav")
+AUDIO = os.path.join(Config.runtime_dir(), "audio.wav")
 
 
 def stop_recording(proc: "asyncio.subprocess.Process | None") -> None:

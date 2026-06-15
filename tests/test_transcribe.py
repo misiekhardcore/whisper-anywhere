@@ -7,7 +7,6 @@ from whisper_anywhere import Transcriber
 from whisper_anywhere.transcribe import (
     _ENGINE_DEFAULTS,
     _ENGINES,
-    _MULTILINGUAL_MODEL,
     SENSEVOICE_SUPPORTED_LANGUAGES,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
@@ -129,7 +128,7 @@ class TestSenseVoiceTranscriber:
 
 class TestVoskTranscriber:
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")
@@ -139,7 +138,7 @@ class TestVoskTranscriber:
         mock_model.assert_called_once_with("/fake/vosk/model")
 
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")
@@ -169,7 +168,7 @@ class TestVoskTranscriber:
         mock_rec.AcceptWaveform.assert_called_once_with(b"audio data")
 
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")
@@ -196,7 +195,7 @@ class TestVoskTranscriber:
         assert result == ""
 
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")
@@ -224,7 +223,7 @@ class TestVoskTranscriber:
         assert result == ""
 
     @patch(
-        "whisper_anywhere.transcribe._resolve_vosk_model",
+        "whisper_anywhere.transcribe.vosk._resolve_vosk_model",
         return_value="/fake/vosk/model",
     )
     @patch("vosk.Model")
@@ -397,7 +396,9 @@ class TestTranscriberProtocol:
         t: Transcriber = load_engine("faster-whisper", language="pl")
         assert isinstance(t, FasterWhisperTranscriber)
         mock_whisper.assert_called_once_with(
-            _MULTILINGUAL_MODEL, device="cpu", compute_type="int8"
+            FasterWhisperTranscriber.MULTILINGUAL_MODEL,
+            device="cpu",
+            compute_type="int8",
         )
 
     @patch("faster_whisper.WhisperModel")
@@ -459,4 +460,4 @@ class TestConstants:
         }
 
     def test_multilingual_model_constant(self) -> None:
-        assert _MULTILINGUAL_MODEL == "distil-large-v3"
+        assert FasterWhisperTranscriber.MULTILINGUAL_MODEL == "distil-large-v3"

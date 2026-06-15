@@ -12,7 +12,7 @@ from .audio import (
     stop_recording,
     write_wav,
 )
-from .config import runtime_dir
+from .config import Config
 from .output import TextOutput
 from .transcribe import Transcriber
 from .vad import VAD
@@ -86,7 +86,7 @@ class Recorder:
                         in_segment = True
                     last_speech_pos = current_pos
 
-                    tmp = os.path.join(runtime_dir(), "live_segment.wav")
+                    tmp = os.path.join(Config.runtime_dir(), "live_segment.wav")
                     try:
                         write_wav(tmp, bytes(buffer[segment_start:current_pos]))
                         text = await asyncio.get_running_loop().run_in_executor(
@@ -106,7 +106,7 @@ class Recorder:
                 elif in_segment:
                     silence_bytes = current_pos - last_speech_pos
                     if silence_bytes >= silence_threshold_bytes:
-                        tmp = os.path.join(runtime_dir(), "live_final.wav")
+                        tmp = os.path.join(Config.runtime_dir(), "live_final.wav")
                         try:
                             write_wav(tmp, bytes(buffer[segment_start:last_speech_pos]))
                             final_text = (
