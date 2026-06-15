@@ -11,7 +11,7 @@ import os
 import subprocess
 import textwrap
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Generator
 
 import pytest
 
@@ -64,7 +64,7 @@ def fake_home(tmp_path: Path) -> Generator[Path, None, None]:
 
 
 def _run(
-    script: Path, home: Path, stdin: Optional[str] = None
+    script: Path, home: Path, stdin: str | None = None
 ) -> subprocess.CompletedProcess:
     bin_dir: Path = home / "bin"
     env: dict[str, str] = {

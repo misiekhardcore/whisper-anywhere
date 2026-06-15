@@ -12,7 +12,7 @@ import os
 import subprocess
 import types
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Generator
 
 import pytest
 
@@ -24,7 +24,7 @@ CONFIG: Path = HOME / ".config/whisper-anywhere/config"
 
 
 @pytest.fixture(scope="session")
-def installed_app() -> Generator[Optional[types.SimpleNamespace], None, None]:
+def installed_app() -> Generator[types.SimpleNamespace | None, None, None]:
     if not os.environ.get("WHISPER_E2E_INSTALL"):
         yield None
         return

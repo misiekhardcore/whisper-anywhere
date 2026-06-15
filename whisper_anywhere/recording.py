@@ -1,7 +1,6 @@
 import asyncio
 import os
 import sys
-from typing import Optional
 
 from .audio import (
     AUDIO,
@@ -25,8 +24,8 @@ class Recorder:
     def __init__(
         self,
         engine: Transcriber,
-        language: Optional[str],
-        vad: Optional[VAD],
+        language: str | None,
+        vad: VAD | None,
         output: TextOutput,
     ) -> None:
         self._engine = engine
@@ -150,8 +149,8 @@ class Recorder:
         read_task: asyncio.Task,
         buffer: bytearray,
         *,
-        vad_task: Optional[asyncio.Task] = None,
-        stop_vad: Optional[asyncio.Event] = None,
+        vad_task: asyncio.Task | None = None,
+        stop_vad: asyncio.Event | None = None,
     ):
         if stop_vad is not None:
             stop_vad.set()

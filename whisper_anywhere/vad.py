@@ -1,5 +1,5 @@
 import sys
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -34,26 +34,24 @@ class FsmnVAD:
 def _parse_vad_result(result: object) -> list[tuple[int, int]]:
     segments: list[tuple[int, int]] = []
 
-    if isinstance(result, dict):
-        if "value" in result:
-            return _parse_vad_result(result["value"])
-        return segments
-
-    if not isinstance(result, list):
-        return segments
+    match result:
+        case {"value": value}:
+            return _parse_vad_result(value)
+        case dict():
+            return []
+        case list():
+            pass
+        case _:
+            return []
 
     for item in result:
-        if isinstance(item, dict):
-            if "value" in item:
-                segments.extend(_parse_vad_result(item["value"]))
-            else:
-                start = item.get("start") or item.get("beg") or item.get("begin")
-                end = item.get("end")
-                if start is not None and end is not None:
-                    segments.append((_to_samples(start), _to_samples(end)))
-        elif isinstance(item, (list, tuple)) and len(item) >= 2:
-            start, end = item[0], item[1]
-            segments.append((_to_samples(start), _to_samples(end)))
+        match item:
+            case {"value": value}:
+                segments.extend(_parse_vad_result(value))
+            case {"start": s, "end": e} | {"beg": s, "end": e} | {"begin": s, "end": e}:
+                segments.append((_to_samples(s), _to_samples(e)))
+            case [s, e, *_]:
+                segments.append((_to_samples(s), _to_samples(e)))
 
     return _merge_overlapping(segments)
 
@@ -93,7 +91,7 @@ def registered_vad_engines() -> list[str]:
 register_vad_engine(FsmnVAD)
 
 
-def load_vad(engine_id: Optional[str] = DEFAULT_VAD_ENGINE) -> VAD:
+def load_vad(engine_id: str | None = DEFAULT_VAD_ENGINE) -> VAD:
     if engine_id not in _VAD_ENGINES:
         raise ValueError(
             f"Unknown VAD engine: {engine_id!r}. "
