@@ -8,9 +8,15 @@ Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, w
 
 ## How it works
 
+**Batch mode** (default, no VAD):
 1. Hold a hotkey (default: `Ctrl+Super+Space`, configurable to a single key like `F12`)
 2. Speak — audio is recorded via PulseAudio
-3. Release — SenseVoice transcribes locally, `ydotool` types the text
+3. Release — the engine transcribes everything at once, `ydotool` types the text
+
+**Live mode** (`--vad` or `vad_engine=fsmn-vad`):
+1. Hold the hotkey and speak — VAD detects speech segments in real-time
+2. Each utterance is transcribed incrementally, with partial results replacing the previous text on screen
+3. Release the hotkey — remaining audio is transcribed and typed
 
 ## Requirements
 
@@ -89,6 +95,12 @@ hotkey=KEY_F12
 # only zh, en, yue, ja, ko — other codes are ignored (auto-detected).
 # With faster-whisper, any ISO 639-1 code works.
 # language=en
+#
+# VAD engine for live streaming (fsmn-vad):
+# vad_engine=fsmn-vad
+#
+# Disable live streaming and use batch mode:
+# vad=off
 ```
 
 ### Command-line options
@@ -99,6 +111,8 @@ whisper-anywhere --hotkey KEY_GRAVE     # use backtick key
 whisper-anywhere --engine faster-whisper
 whisper-anywhere --model distil-small.en
 whisper-anywhere --language en          # force language (SenseVoice: zh/en/yue/ja/ko; faster-whisper: any ISO 639-1)
+whisper-anywhere --vad                  # live mode with FSMN-VAD
+whisper-anywhere --vad=off              # explicit batch mode
 whisper-anywhere --stdout               # JSON lines output (for opencode plugin)
 ```
 
@@ -131,11 +145,17 @@ Set via config or `--model`. When you request a non-English language without spe
 ```
 whisper-anywhere/
 ├── whisper_anywhere/    # Python package
-│   ├── __main__.py      # daemon entry point
+│   ├── __init__.py
+│   ├── __main__.py      # daemon entry point, config resolution
 │   ├── audio.py         # audio capture and WAV writing
 │   ├── config.py        # configuration and CLI args
+│   ├── daemon.py        # main event loop, keyboard device handling
 │   ├── keyboard.py      # evdev keyboard detection
-│   └── transcribe.py    # model loading
+│   ├── lock.py          # single-instance lock
+│   ├── output.py        # text output (ydotool / stdout)
+│   ├── recording.py     # audio recording and VAD-gated live loop
+│   ├── transcribe.py    # model loading and engine registry
+│   └── vad.py           # voice activity detection
 ├── tests/               # pytest suite
 ├── install.sh           # one-shot installer
 ├── uninstall.sh         # reverses install.sh
