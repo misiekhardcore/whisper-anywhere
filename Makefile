@@ -1,4 +1,4 @@
-.PHONY: test test-e2e install install-deps clean build lint format check dev precommit precommit-install
+.PHONY: test test-e2e install install-deps clean build lint format check dev bump changelog precommit precommit-install
 
 PYTHON ?= $(shell which python3)
 PYTEST ?= $(PYTHON) -m pytest
@@ -37,6 +37,14 @@ check:
 
 dev:
 	$(PYTHON) -m whisper_anywhere $(ARGS)
+
+bump:
+	sed -i "s/^version = \".*\"/version = \"$(VERSION)\"/" pyproject.toml
+	@echo "Version bumped to $(VERSION)"
+
+changelog:
+	sed -i '/^## \[Unreleased\]/,/^## \[/{/^## \[Unreleased\]/d;/^## \[/!d}' CHANGELOG.md
+	git cliff --unreleased --prepend CHANGELOG.md
 
 precommit: check
 	$(PYTEST) -v tests/
