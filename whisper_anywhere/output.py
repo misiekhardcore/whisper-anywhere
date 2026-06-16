@@ -14,10 +14,10 @@ class TextOutput:
     def _probe_typer() -> Typer | None:
         if shutil.which("wtype") and WtypeTyper._check_compositor():
             return WtypeTyper()
-        if shutil.which("wl-copy") and shutil.which("ydotool"):
-            return ClipboardTyper()
         if shutil.which("ydotool"):
             return YdotoolTyper()
+        if shutil.which("wl-copy") and shutil.which("ydotool"):
+            return ClipboardTyper()
         return None
 
     def _get_typer(self) -> Typer:

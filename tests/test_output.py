@@ -385,7 +385,7 @@ class TestTextOutputProbe:
             typer: Typer | None = TextOutput._probe_typer()
             assert isinstance(typer, WtypeTyper)
 
-    def test_wtype_rejected_then_clipboard(self) -> None:
+    def test_wtype_rejected_then_ydotool(self) -> None:
         with (
             patch("shutil.which") as which,
             patch.object(WtypeTyper, "_check_compositor", return_value=False),
@@ -397,7 +397,7 @@ class TestTextOutputProbe:
             }.get(cmd)
 
             typer: Typer | None = TextOutput._probe_typer()
-            assert isinstance(typer, ClipboardTyper)
+            assert isinstance(typer, YdotoolTyper)
 
     def test_clipboard_fallback_no_wl_copy(self) -> None:
         with (
