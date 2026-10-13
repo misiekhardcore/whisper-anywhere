@@ -45,7 +45,8 @@ python3 -m pip install --user torch torchaudio \
   --index-url https://download.pytorch.org/whl/cpu
 python3 -m pip install --user funasr
 # Optional: faster-whisper for alternative engine
-python3 -m pip install --user faster-whisper
+python3 -m pip install --user faster-whisper 'av<19' \
+  || python3 -m pip install --user --break-system-packages faster-whisper 'av<19'
 # Optional: Vosk for lightweight multilingual transcription
 python3 -m pip install --user vosk
 

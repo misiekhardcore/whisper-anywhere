@@ -66,9 +66,9 @@ step_python_packages() {
     # sensevoice (default engine) via funasr
     "$PYTHON" -m pip install --user funasr 2>/dev/null \
         || CC=gcc CXX=g++ "$PYTHON" -m pip install --user --break-system-packages funasr
-    # faster-whisper is also installed so users can switch with --engine faster-whisper
-    "$PYTHON" -m pip install --user faster-whisper 2>/dev/null \
-        || "$PYTHON" -m pip install --user --break-system-packages faster-whisper
+    # faster-whisper currently needs PyAV below 19 for audio decoding.
+    "$PYTHON" -m pip install --user faster-whisper "av<19" 2>/dev/null \
+        || "$PYTHON" -m pip install --user --break-system-packages faster-whisper "av<19"
 }
 
 step_bridge_system_packages() {

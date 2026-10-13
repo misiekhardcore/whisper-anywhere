@@ -53,6 +53,11 @@ def fake_home(tmp_path: Path) -> Generator[Path, None, None]:
         "python3",
         textwrap.dedent(f"""\
         if [[ "${{1:-}}" == "-m" && "${{2:-}}" == "pip" ]]; then
+            if [[ "${{REJECT_USER_PIP:-}}" == "1" &&
+                  " $* " == *" --user "* &&
+                  " $* " != *" --break-system-packages "* ]]; then
+                exit 1
+            fi
             echo "$*" >> "$PIP_LOG"
             exit 0
         fi
@@ -67,7 +72,10 @@ def fake_home(tmp_path: Path) -> Generator[Path, None, None]:
 
 
 def _run(
-    script: Path, home: Path, stdin: str | None = None
+    script: Path,
+    home: Path,
+    stdin: str | None = None,
+    reject_user_pip: bool = False,
 ) -> subprocess.CompletedProcess:
     bin_dir: Path = home / "bin"
     env: dict[str, str] = {
@@ -79,6 +87,7 @@ def _run(
         # Force the scripts to use our python3 stub
         "PYTHON": str(bin_dir / "python3"),
         "PIP_LOG": str(home / "pip.log"),
+        "REJECT_USER_PIP": "1" if reject_user_pip else "0",
     }
     return subprocess.run(
         ["bash", str(script)],
@@ -123,6 +132,17 @@ class TestInstallUninstall:
             "install --user torch torchaudio "
             "--index-url https://download.pytorch.org/whl/cpu"
         ) in pip_calls
+
+    def test_install_handles_externally_managed_python(self, fake_home: Path) -> None:
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh", fake_home, reject_user_pip=True
+        )
+        assert result.returncode == 0, f"install.sh failed:\n{result.stderr}"
+
+        pip_calls: str = (fake_home / "pip.log").read_text()
+        assert (
+            "install --user --break-system-packages faster-whisper av<19" in pip_calls
+        )
 
     def test_install_removes_legacy_desktop_entry(self, fake_home: Path) -> None:
         autostart: Path = fake_home / ".config" / "autostart"

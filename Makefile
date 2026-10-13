@@ -29,14 +29,14 @@ clean:
 	rm -rf .pytest_cache dist *.egg-info
 
 lint:
-	ruff check .
+	$(PYTHON) -m ruff check .
 
 format:
-	ruff format .
+	$(PYTHON) -m ruff format .
 
 check:
-	ruff format --check .
-	ruff check .
+	$(PYTHON) -m ruff format --check .
+	$(PYTHON) -m ruff check .
 
 dev:
 	$(PYTHON) -m whisper_anywhere $(ARGS)
