@@ -41,6 +41,8 @@ Or manually, step by step:
 sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool
 
 # Python packages (default: sensevoice via funasr)
+python3 -m pip install --user torch torchaudio \
+  --index-url https://download.pytorch.org/whl/cpu
 python3 -m pip install --user funasr
 # Optional: faster-whisper for alternative engine
 python3 -m pip install --user faster-whisper

@@ -58,6 +58,11 @@ step_system_packages() {
 step_python_packages() {
     echo ""
     echo "==> Installing Python packages..."
+    # SenseVoice and FSMN-VAD run on CPU and require PyTorch.
+    "$PYTHON" -m pip install --user torch torchaudio \
+        --index-url https://download.pytorch.org/whl/cpu 2>/dev/null \
+        || "$PYTHON" -m pip install --user --break-system-packages \
+            torch torchaudio --index-url https://download.pytorch.org/whl/cpu
     # sensevoice (default engine) via funasr
     "$PYTHON" -m pip install --user funasr 2>/dev/null \
         || CC=gcc CXX=g++ "$PYTHON" -m pip install --user --break-system-packages funasr

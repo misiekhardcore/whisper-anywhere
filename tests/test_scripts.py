@@ -52,7 +52,10 @@ def fake_home(tmp_path: Path) -> Generator[Path, None, None]:
     stub(
         "python3",
         textwrap.dedent(f"""\
-        if [[ "${{1:-}}" == "-m" && "${{2:-}}" == "pip" ]]; then exit 0; fi
+        if [[ "${{1:-}}" == "-m" && "${{2:-}}" == "pip" ]]; then
+            echo "$*" >> "$PIP_LOG"
+            exit 0
+        fi
         if [[ "${{1:-}}" == "-c" ]] && echo "${{2:-}}" | grep -q "WhisperModel"; then
             exit 0
         fi
@@ -75,6 +78,7 @@ def _run(
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         # Force the scripts to use our python3 stub
         "PYTHON": str(bin_dir / "python3"),
+        "PIP_LOG": str(home / "pip.log"),
     }
     return subprocess.run(
         ["bash", str(script)],
@@ -109,6 +113,16 @@ class TestInstallUninstall:
         assert "Restart=on-failure" in unit
         assert "WantedBy=default.target" in unit
         assert "After=ydotool.service" in unit
+
+    def test_install_installs_cpu_pytorch(self, fake_home: Path) -> None:
+        result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
+        assert result.returncode == 0, f"install.sh failed:\n{result.stderr}"
+
+        pip_calls: str = (fake_home / "pip.log").read_text()
+        assert (
+            "install --user torch torchaudio "
+            "--index-url https://download.pytorch.org/whl/cpu"
+        ) in pip_calls
 
     def test_install_removes_legacy_desktop_entry(self, fake_home: Path) -> None:
         autostart: Path = fake_home / ".config" / "autostart"
