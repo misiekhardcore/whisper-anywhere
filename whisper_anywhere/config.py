@@ -81,10 +81,7 @@ class Config:
                     sys.exit(1)
         if insertion is not None:
             if insertion.inserter is None:
-                print(
-                    f"Missing insertion tool. {insertion.description}",
-                    file=sys.stderr,
-                )
+                print(insertion.description, file=sys.stderr)
                 sys.exit(1)
             if insertion.warning:
                 print(insertion.warning, file=sys.stderr)

@@ -16,10 +16,6 @@ class ClipboardContent:
 
     text: str | None
 
-    @property
-    def is_text(self) -> bool:
-        return self.text is not None
-
 
 class Clipboard(ABC):
     @abstractmethod

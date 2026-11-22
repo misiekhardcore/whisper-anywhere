@@ -21,13 +21,7 @@ focused application.
   when `ydotool` is absent.
 - **Typing insertion** - injecting one key event per character through `ydotool`
   or `wtype`. Fallback used only when clipboard insertion is unavailable.
-- **Clipboard snapshot** - the clipboard text read before a clipboard insertion,
-  written back afterwards so the user keeps their clipboard.
-- **Paste chord** - the key combination that pastes: Ctrl+V, or Ctrl+Shift+V in a
-  terminal window.
-- **Terminal window** - a focused window identified as a terminal emulator, where
-  the paste chord is Ctrl+Shift+V. Detected through `hyprctl` or `swaymsg`; other
-  compositors yield an unknown result and get Ctrl+V.
+- **Paste chord** - the key combination that pastes: Ctrl+V.
 - **Engine** - a transcription backend implementing `Transcriber`
   (SenseVoice, faster-whisper, Vosk).
 - **Runtime directory** - the private directory holding the lock and the

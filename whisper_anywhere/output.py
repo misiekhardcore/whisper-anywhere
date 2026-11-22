@@ -17,12 +17,7 @@ class TextOutput:
         if self._stdout_mode:
             print(json.dumps({"type": "final", "text": text}), flush=True)
             return
-        if self._inserter is None:
-            print(
-                "No insertion tool configured — transcript not delivered.",
-                file=sys.stderr,
-            )
-            return
+        assert self._inserter is not None, "insertion is resolved at startup"
         try:
             await asyncio.get_running_loop().run_in_executor(
                 None, self._inserter.insert_text, text

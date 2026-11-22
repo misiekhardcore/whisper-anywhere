@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backspacing and retyping already-inserted text, which the `Typer` implementations no longer offer
 - The `wtype` compositor probe that injected a stray Ctrl keystroke into the focused window at startup; tool presence and session type now decide insertion
 
+### Fixed
+
+- `--stdout` is honoured when passed as a flag again; the mode check used to treat the boolean flag as one of the `1`/`true`/`yes` config strings
+
 ## [1.1.3] - 2026-10-13
 ### Fixed
 

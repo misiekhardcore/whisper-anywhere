@@ -155,7 +155,6 @@ class TestWaylandClipboard:
             content = WaylandClipboard().read()
 
         assert content.text == "hello"
-        assert content.is_text is True
         assert run.call_args_list[1].args[0] == ["wl-paste", "--no-newline"]
 
     def test_read_non_text_is_not_text(self) -> None:
@@ -164,14 +163,13 @@ class TestWaylandClipboard:
             content = WaylandClipboard().read()
 
         assert content.text is None
-        assert content.is_text is False
         assert run.call_count == 1
 
     def test_read_failure_is_not_text(self) -> None:
         with patch("subprocess.run", side_effect=FileNotFoundError):
             content = WaylandClipboard().read()
 
-        assert content.is_text is False
+        assert content.text is None
 
     def test_read_does_not_inherit_standard_streams(self) -> None:
         with patch("subprocess.run") as run:

@@ -67,13 +67,6 @@ class TestEmit:
         assert inserter.thread is not None
         assert inserter.thread is not threading.main_thread()
 
-    async def test_missing_inserter_reports(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        await TextOutput(False, None).emit("hello")
-
-        assert "insertion" in capsys.readouterr().err.lower()
-
     async def test_inserter_failure_does_not_raise(self) -> None:
         inserter: MagicMock = MagicMock()
         inserter.insert_text.side_effect = RuntimeError("boom")

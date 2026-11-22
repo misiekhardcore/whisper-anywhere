@@ -12,6 +12,10 @@ from .typing import TypingInserter
 Which = Callable[[str], str | None]
 
 WAYLAND_SESSION = "wayland"
+MISSING_TOOL_MESSAGE = (
+    "No insertion tool found — install ydotool (sudo apt install ydotool) "
+    "or wtype (sudo apt install wtype)"
+)
 
 
 @dataclass(frozen=True)
@@ -37,41 +41,26 @@ def select_insertion(
     session: str = (
         detect_session_type() if session_type is None else session_type.lower()
     )
-    chord: PasteChord | None = _select_chord(which)
-    clipboard_problem: str | None = _clipboard_problem(session, which)
+    if which("ydotool"):
+        chord: PasteChord = YdotoolChord()
+    elif which("wtype"):
+        chord = WtypeChord()
+    else:
+        return InsertionSelection(None, MISSING_TOOL_MESSAGE, None)
 
-    if chord is not None and clipboard_problem is None:
+    if session != WAYLAND_SESSION:
+        clipboard_problem: str = "the Wayland clipboard backend needs a Wayland session"
+    elif not which("wl-copy") or not which("wl-paste"):
+        clipboard_problem = f"wl-copy/wl-paste not found — {WL_CLIPBOARD_INSTALL}"
+    else:
         return InsertionSelection(
             ClipboardInserter(WaylandClipboard(), chord),
             f"clipboard paste ({chord.TOOL} + wl-clipboard)",
             None,
         )
-    if chord is not None:
-        return InsertionSelection(
-            TypingInserter(chord.TOOL),
-            f"typing ({chord.TOOL})",
-            f"Clipboard insertion unavailable: {clipboard_problem}. "
-            "Falling back to typing insertion.",
-        )
     return InsertionSelection(
-        None,
-        "no insertion tool: install ydotool (sudo apt install ydotool) "
-        "or wtype (sudo apt install wtype)",
-        None,
+        TypingInserter(chord.TOOL),
+        f"typing ({chord.TOOL})",
+        f"Clipboard insertion unavailable: {clipboard_problem}. "
+        "Falling back to typing insertion.",
     )
-
-
-def _select_chord(which: Which) -> PasteChord | None:
-    if which("ydotool"):
-        return YdotoolChord()
-    if which("wtype"):
-        return WtypeChord()
-    return None
-
-
-def _clipboard_problem(session: str, which: Which) -> str | None:
-    if session != WAYLAND_SESSION:
-        return "the Wayland clipboard backend needs a Wayland session"
-    if not which("wl-copy") or not which("wl-paste"):
-        return f"wl-copy/wl-paste not found — {WL_CLIPBOARD_INSTALL}"
-    return None
