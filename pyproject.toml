@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 whisper-anywhere = "whisper_anywhere.__main__:main"
 
 [project.optional-dependencies]
-dev = ["build", "pre-commit", "pytest", "pytest-asyncio", "ruff"]
+dev = ["build", "evdev", "pre-commit", "pytest", "pytest-asyncio", "ruff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

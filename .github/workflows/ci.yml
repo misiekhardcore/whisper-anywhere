@@ -36,11 +36,8 @@ jobs:
       - name: Install evdev
         run: pip install evdev
 
-      - name: Install dev dependencies
-        run: make install-deps
-
-      - name: Install package
-        run: make install-pkg
+      - name: Install dev environment
+        run: make dev-setup
 
       - name: Run tests
         run: make test
