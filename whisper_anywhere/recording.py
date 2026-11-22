@@ -71,7 +71,7 @@ class Recorder:
             return
         if not text.strip():
             return
-        self._output.emit(text)
+        await self._output.emit(text)
 
     async def _transcribe(self, pcm: bytes | bytearray) -> str:
         write_wav(AUDIO, pcm)

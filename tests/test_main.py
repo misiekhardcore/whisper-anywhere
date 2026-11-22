@@ -7,6 +7,7 @@ import pytest
 from whisper_anywhere.__main__ import main
 from whisper_anywhere.config import Config
 from whisper_anywhere.daemon import Daemon
+from whisper_anywhere.insertion import InsertionSelection, TextInserter
 
 
 class _StubEngine:
@@ -16,18 +17,28 @@ class _StubEngine:
         return ""
 
 
-def _start(tmp_path: Path, config_text: str) -> list[Daemon]:
+class _FakeInserter(TextInserter):
+    def insert_text(self, text: str) -> None: ...
+
+
+def _start(
+    tmp_path: Path,
+    config_text: str,
+    argv: list[str] | None = None,
+    selection: InsertionSelection | None = None,
+) -> list[Daemon]:
     (tmp_path / "config").write_text(config_text)
     running: list[Daemon] = []
 
     async def fake_run(self: Daemon) -> None:
         running.append(self)
 
-    argv: list[str] = ["whisper-anywhere", "--stdout"]
+    resolved: InsertionSelection = selection or InsertionSelection(None, "stdout", None)
     with (
-        patch.object(sys, "argv", argv),
+        patch.object(sys, "argv", argv or ["whisper-anywhere", "--stdout"]),
         patch.object(Config, "CONFIG_DIR", str(tmp_path)),
         patch.object(Config, "check_deps"),
+        patch("whisper_anywhere.__main__.select_insertion", return_value=resolved),
         patch("whisper_anywhere.__main__.Lock"),
         patch("whisper_anywhere.transcribe.load_engine", return_value=_StubEngine()),
         patch.object(Daemon, "run", fake_run),
@@ -55,3 +66,40 @@ class TestStartup:
         err: str = capsys.readouterr().err
         assert "engine: sensevoice" in err
         assert "single-key" in err
+
+    def test_startup_line_reports_stdout_output(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _start(tmp_path, "hotkey=KEY_F12\n")
+
+        assert "insertion: stdout" in capsys.readouterr().err
+
+    def test_startup_line_reports_clipboard_insertion(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _start(
+            tmp_path,
+            "hotkey=KEY_F12\n",
+            argv=["whisper-anywhere"],
+            selection=InsertionSelection(
+                _FakeInserter(), "clipboard paste (ydotool + wl-clipboard)", None
+            ),
+        )
+
+        assert "insertion: clipboard paste" in capsys.readouterr().err
+
+    def test_no_inserter_exits_with_actionable_message(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit) as exc:
+            _start(
+                tmp_path,
+                "hotkey=KEY_F12\n",
+                argv=["whisper-anywhere"],
+                selection=InsertionSelection(
+                    None, "no insertion tool: sudo apt install ydotool", None
+                ),
+            )
+
+        assert exc.value.code == 1
+        assert "sudo apt install ydotool" in capsys.readouterr().err

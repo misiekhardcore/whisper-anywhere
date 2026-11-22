@@ -14,7 +14,11 @@ focused application.
 - **Insertion** - delivering a transcript to the focused application. Two kinds
   exist: clipboard insertion and typing insertion.
 - **Clipboard insertion** - writing the transcript to the system clipboard and
-  sending a paste chord. The preferred path.
+  sending a paste chord. The preferred path, chosen once at startup.
+- **Clipboard backend** - the tool that reads and writes the clipboard. On a Wayland
+  session the backend is `wl-copy`/`wl-paste` from wl-clipboard.
+- **Chord injector** - the tool that sends the paste chord: `ydotool`, or `wtype`
+  when `ydotool` is absent.
 - **Typing insertion** - injecting one key event per character through `ydotool`
   or `wtype`. Fallback used only when clipboard insertion is unavailable.
 - **Clipboard snapshot** - the clipboard text read before a clipboard insertion,

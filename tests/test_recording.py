@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -36,7 +36,7 @@ class TestFinishRecording:
 
         with (
             patch("whisper_anywhere.recording.write_wav") as write_wav,
-            patch.object(TextOutput, "emit") as mock_emit,
+            patch.object(TextOutput, "emit", new_callable=AsyncMock) as mock_emit,
         ):
             await recorder.finish(_recording(buffer))
 
@@ -51,7 +51,7 @@ class TestFinishRecording:
 
         with (
             patch("whisper_anywhere.recording.write_wav") as write_wav,
-            patch.object(TextOutput, "emit") as mock_emit,
+            patch.object(TextOutput, "emit", new_callable=AsyncMock) as mock_emit,
         ):
             await recorder.finish(_recording(bytearray()))
 
@@ -67,7 +67,7 @@ class TestFinishRecording:
 
         with (
             patch("whisper_anywhere.recording.write_wav"),
-            patch.object(TextOutput, "emit") as mock_emit,
+            patch.object(TextOutput, "emit", new_callable=AsyncMock) as mock_emit,
         ):
             await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
 
@@ -84,7 +84,7 @@ class TestFinishRecording:
 
         with (
             patch("whisper_anywhere.recording.write_wav"),
-            patch.object(TextOutput, "emit") as mock_emit,
+            patch.object(TextOutput, "emit", new_callable=AsyncMock) as mock_emit,
         ):
             await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
 

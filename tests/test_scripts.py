@@ -30,8 +30,8 @@ def fake_home(tmp_path: Path) -> Generator[Path, None, None]:
         p.write_text(f"#!/usr/bin/env bash\n{body}\n")
         p.chmod(0o755)
 
-    # Package manager — do nothing
-    stub("apt-get", "exit 0")
+    # Package manager — record the requested packages, install nothing
+    stub("apt-get", 'echo "$*" >> "$APT_LOG"')
 
     # systemctl — always succeed; never touches the real daemon
     stub("systemctl", "exit 0")
@@ -41,7 +41,7 @@ def fake_home(tmp_path: Path) -> Generator[Path, None, None]:
         "sudo",
         textwrap.dedent("""\
         case "${1:-}" in
-            apt-get|usermod|gpasswd) exit 0 ;;
+            usermod|gpasswd) exit 0 ;;
             *) exec "$@" ;;
         esac
     """),
@@ -76,6 +76,7 @@ def _run(
     home: Path,
     stdin: str | None = None,
     reject_user_pip: bool = False,
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
     bin_dir: Path = home / "bin"
     env: dict[str, str] = {
@@ -87,7 +88,9 @@ def _run(
         # Force the scripts to use our python3 stub
         "PYTHON": str(bin_dir / "python3"),
         "PIP_LOG": str(home / "pip.log"),
+        "APT_LOG": str(home / "apt.log"),
         "REJECT_USER_PIP": "1" if reject_user_pip else "0",
+        **(extra_env or {}),
     }
     return subprocess.run(
         ["bash", str(script)],
@@ -144,6 +147,29 @@ class TestInstallUninstall:
         assert (
             "install --user --break-system-packages faster-whisper av<19" in pip_calls
         )
+
+    def test_install_adds_wl_clipboard_on_wayland(self, fake_home: Path) -> None:
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh",
+            fake_home,
+            extra_env={"WAYLAND_DISPLAY": "wayland-0"},
+        )
+        assert result.returncode == 0, f"install.sh failed:\n{result.stderr}"
+
+        packages: str = (fake_home / "apt.log").read_text()
+        assert "wl-clipboard" in packages
+        assert "ydotool" in packages
+
+    def test_install_enables_ydotool_on_wayland(self, fake_home: Path) -> None:
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh",
+            fake_home,
+            extra_env={"WAYLAND_DISPLAY": "wayland-0"},
+        )
+        assert result.returncode == 0, f"install.sh failed:\n{result.stderr}"
+
+        assert "ydotool" in result.stdout
+        assert "Insertion: transcript written to the clipboard" in result.stdout
 
     def test_install_removes_legacy_desktop_entry(self, fake_home: Path) -> None:
         autostart: Path = fake_home / ".config" / "autostart"

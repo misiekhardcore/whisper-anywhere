@@ -77,15 +77,15 @@ async def drive_dictation(
     loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
     done: asyncio.Future = loop.create_future()
 
-    output: TextOutput = TextOutput(True)
+    output: TextOutput = TextOutput(True, None)
     original_emit = output.emit
 
-    def capturing_emit(text: str | None) -> None:
-        original_emit(text)
+    async def capturing_emit(text: str | None) -> None:
+        await original_emit(text)
         if not done.done():
             done.set_result(text)
 
-    output.emit = capturing_emit  # type: ignore[assignment]
+    output.emit = capturing_emit  # type: ignore[method-assign]
 
     daemon_instance: Daemon = Daemon(ecodes.KEY_F12, model, output, None)
     task: asyncio.Task = asyncio.create_task(daemon_instance.run())

@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 
+from whisper_anywhere.insertion import select_insertion
 from whisper_anywhere.transcribe import (
     DEFAULT_ENGINE_ID,
     FasterWhisperTranscriber,
@@ -31,7 +32,10 @@ class Config:
         return path
 
     @staticmethod
-    def check_deps(engine_id: str = DEFAULT_ENGINE_ID) -> None:
+    def check_deps(
+        engine_id: str = DEFAULT_ENGINE_ID,
+        require_insertion: bool = True,
+    ) -> None:
         missing = []
         if not subprocess.run(["which", "parec"], capture_output=True).returncode == 0:
             missing.append("parec")
@@ -75,6 +79,16 @@ class Config:
                         file=sys.stderr,
                     )
                     sys.exit(1)
+        if require_insertion:
+            selection = select_insertion()
+            if selection.inserter is None:
+                print(
+                    f"Missing insertion tool. {selection.description}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            if selection.warning:
+                print(selection.warning, file=sys.stderr)
 
     @staticmethod
     def load_config(path: str | None = None) -> dict[str, str]:

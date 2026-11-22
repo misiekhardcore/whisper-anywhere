@@ -11,7 +11,7 @@ Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, w
 1. Hold a hotkey (default: `Ctrl+Super+Space`, configurable to a single key like `F12`)
 2. Speak — audio is recorded via PulseAudio
 3. Release — the engine transcribes the whole hold in one pass and the transcript is
-   typed into the focused window
+   inserted once: written to the clipboard and pasted with a single Ctrl+V chord
 
 A dictation produces at most one transcript, and the daemon never revises text after
 it has been inserted. An empty hold, or a hold the engine hears as silence, produces
@@ -24,6 +24,8 @@ which is why a single hold is capped at 60 seconds.
 - **PulseAudio or PipeWire** (for `parec`)
 - **A Wayland or X11 desktop** — `ydotool` injects keystrokes via the kernel `uinput`
   device, so it works under either (tested on GNOME and KDE Plasma)
+- **`wl-clipboard`** (`wl-copy`/`wl-paste`) on Wayland, for the preferred clipboard
+  insertion; without it the transcript is typed instead
 - **systemd** (the daemon installs as a `systemd --user` service)
 
 ## Quick install
@@ -39,6 +41,8 @@ Or manually, step by step:
 ```bash
 # system dependencies
 sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool
+# on Wayland, the clipboard backend used for insertion
+sudo apt install wl-clipboard
 
 # Python packages (default: sensevoice via funasr)
 python3 -m pip install --user torch torchaudio \
@@ -78,6 +82,19 @@ whisper-anywhere
 ```
 
 Either way: hold the hotkey, speak, release. Text appears wherever your cursor is.
+
+### Insertion
+
+The transcript is written to the system clipboard and a single paste chord is sent,
+so the focused application receives one paste instead of a keystroke stream. The
+preferred path is `wl-copy`/`wl-paste` (Wayland) plus `ydotool` sending Ctrl+V;
+`wtype` sends the chord only when `ydotool` is absent. After a successful paste the
+transcript is left on the clipboard.
+
+When no clipboard backend is available, or the session is not Wayland, insertion
+falls back to typing the transcript through `ydotool` (or `wtype`) and reports why.
+The daemon prints the chosen insertion strategy on startup, and names the package to
+install when a tool is missing.
 
 ### Configuration
 
@@ -184,10 +201,10 @@ whisper-anywhere/
 │   ├── daemon.py        # main event loop, keyboard device handling
 │   ├── keyboard.py      # evdev keyboard detection
 │   ├── lock.py          # single-instance lock
-│   ├── output.py        # text output (ydotool / stdout)
+│   ├── output.py        # text output (stdout / insertion)
 │   ├── recording.py     # one recording and one transcription per dictation
 │   ├── transcribe/      # model loading and engine registry
-│   └── typers/          # ydotool / wtype / clipboard text insertion
+│   └── insertion/       # clipboard backend, paste chord, clipboard and typing inserters
 ├── tests/               # pytest suite
 ├── install.sh           # one-shot installer
 ├── uninstall.sh         # reverses install.sh

@@ -14,7 +14,7 @@ cd whisper-anywhere
 ./install.sh
 ```
 
-The daemon is a Python package with runtime dependencies `python3-evdev` (apt) and `faster-whisper` (pip). System dependencies (`ydotool`, `pulseaudio-utils`) are installed by `install.sh`.
+The daemon is a Python package with runtime dependencies `python3-evdev` (apt) and `faster-whisper` (pip). System dependencies (`ydotool`, `pulseaudio-utils`, and `wl-clipboard` on Wayland) are installed by `install.sh`.
 
 ## Development commands
 

@@ -50,8 +50,8 @@ step_system_packages() {
             python3-pip \
             ydotool
     if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-        info "Wayland detected — also installing wtype + wl-clipboard"
-        pkg_install wtype wl-clipboard
+        info "Wayland detected — also installing the clipboard backend (wl-clipboard)"
+        pkg_install wl-clipboard
     fi
 }
 
@@ -90,7 +90,7 @@ step_input_group() {
 
 step_ydotool_service() {
     echo ""
-    echo "==> Enabling ydotool systemd user service..."
+    echo "==> Enabling ydotool systemd user service (paste chord injector)..."
     systemctl --user enable --now ydotool.service 2>/dev/null || true
     if systemctl --user is-active ydotool.service &>/dev/null; then
         info "ydotool service is running"
@@ -209,6 +209,13 @@ summary() {
         echo "           (or set hotkey=KEY_F12 in $CONFIG_DIR/config)"
     fi
     echo ""
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        echo "  Insertion: transcript written to the clipboard, one Ctrl+V paste chord"
+        echo "    (wl-clipboard backend, ydotool chord injector)"
+    else
+        echo "  Insertion: typing through ydotool (no clipboard backend on this session)"
+    fi
+    echo ""
     echo "  The daemon runs as a systemd user service and auto-starts on login."
     echo "    start now:  systemctl --user start whisper-anywhere"
     echo "    status:     systemctl --user status whisper-anywhere"
@@ -243,11 +250,7 @@ need_root
 step_system_packages
 step_bridge_system_packages
 step_input_group
-if [ -z "${WAYLAND_DISPLAY:-}" ]; then
-    step_ydotool_service
-else
-    info "skipping ydotool service (using wtype on Wayland)"
-fi
+step_ydotool_service
 step_python_packages
 step_install_package
 step_model
