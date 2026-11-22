@@ -64,7 +64,7 @@ whisper_anywhere/
 ## Script architecture
 
 - `find_keyboards()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
-- `check_deps(engine, require_insertion)` — verifies `parec` is on PATH, `evdev` imports, the selected engine's package is importable (`funasr` for SenseVoice only, `faster_whisper`, or `vosk`), and an insertion strategy exists; that last check is skipped in stdout mode
+- `check_deps(engine, insertion)` — verifies `parec` is on PATH, `evdev` imports, the selected engine's package is importable (`funasr` for SenseVoice only, `faster_whisper`, or `vosk`), and the already-resolved insertion strategy is usable; `main()` resolves that strategy once, so the diagnosis and the running inserter cannot disagree
 - `select_insertion()` — resolves insertion once at startup: clipboard paste when a Wayland clipboard backend and a chord injector exist, otherwise typing; returns the description, an optional warning and the inserter
 - `load_model()` — initializes the transcription engine (default: SenseVoice via `funasr.AutoModel`). Pluggable via the `Transcriber` protocol — see `register_engine()`.
 - `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file

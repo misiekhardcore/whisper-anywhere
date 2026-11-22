@@ -2,7 +2,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-WL_CLIPBOARD_PACKAGE = "wl-clipboard"
+WL_CLIPBOARD_INSTALL = "install it: sudo apt install wl-clipboard"
 _READ_TIMEOUT_SECONDS = 2
 
 
@@ -50,9 +50,7 @@ class WaylandClipboard(Clipboard):
                 stderr=subprocess.DEVNULL,
             )
         except FileNotFoundError as exc:
-            raise ClipboardError(
-                "wl-copy not found — install it: sudo apt install wl-clipboard"
-            ) from exc
+            raise ClipboardError(f"wl-copy not found — {WL_CLIPBOARD_INSTALL}") from exc
         if result.returncode != 0:
             raise ClipboardError(f"wl-copy failed (exit {result.returncode})")
 

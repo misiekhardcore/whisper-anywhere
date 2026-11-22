@@ -88,18 +88,37 @@ class TestStartup:
 
         assert "insertion: clipboard paste" in capsys.readouterr().err
 
-    def test_no_inserter_exits_with_actionable_message(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    def test_insertion_strategy_is_resolved_once_and_consumed(
+        self, tmp_path: Path
     ) -> None:
-        with pytest.raises(SystemExit) as exc:
-            _start(
-                tmp_path,
-                "hotkey=KEY_F12\n",
-                argv=["whisper-anywhere"],
-                selection=InsertionSelection(
-                    None, "no insertion tool: sudo apt install ydotool", None
-                ),
-            )
+        inserter: _FakeInserter = _FakeInserter()
+        selection: InsertionSelection = InsertionSelection(
+            inserter,
+            "typing (ydotool)",
+            "Clipboard insertion unavailable: install wl-clipboard",
+        )
 
-        assert exc.value.code == 1
-        assert "sudo apt install ydotool" in capsys.readouterr().err
+        async def fake_run(self: Daemon) -> None:
+            return None
+
+        with (
+            patch.object(sys, "argv", ["whisper-anywhere"]),
+            patch.object(Config, "CONFIG_DIR", str(tmp_path)),
+            patch.object(Config, "check_deps") as check_deps,
+            patch(
+                "whisper_anywhere.__main__.select_insertion",
+                return_value=selection,
+            ) as select,
+            patch("whisper_anywhere.__main__.TextOutput") as output,
+            patch("whisper_anywhere.__main__.Lock"),
+            patch(
+                "whisper_anywhere.transcribe.load_engine", return_value=_StubEngine()
+            ),
+            patch.object(Daemon, "run", fake_run),
+        ):
+            main()
+
+        select.assert_called_once()
+        check_deps.assert_called_once()
+        assert check_deps.call_args.args[1] is selection
+        output.assert_called_once_with(False, inserter)

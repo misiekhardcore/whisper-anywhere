@@ -7,7 +7,7 @@ from evdev import ecodes
 
 from .config import Config
 from .daemon import Daemon
-from .insertion import select_insertion
+from .insertion import InsertionSelection, select_insertion
 from .lock import Lock
 from .output import TextOutput
 from .transcribe import Transcriber
@@ -28,12 +28,12 @@ def load_engine(
     cfg: dict,
     args: Namespace,
     language: str | None = None,
-    require_insertion: bool = True,
+    insertion: InsertionSelection | None = None,
 ) -> Transcriber:
     from .transcribe import DEFAULT_ENGINE_ID, load_engine
 
     engine_id = args.engine or cfg.get("engine", DEFAULT_ENGINE_ID)
-    Config.check_deps(engine_id, require_insertion)
+    Config.check_deps(engine_id, insertion)
     model_id = args.model or cfg.get("model")
     return load_engine(engine_id, model_id, language)
 
@@ -50,12 +50,9 @@ def main():
 
     hotkey_code = load_hotkey(cfg, args)
     language = args.language or cfg.get("language")
-    engine = load_engine(cfg, args, language, require_insertion=not stdout_mode)
+    selection: InsertionSelection | None = None if stdout_mode else select_insertion()
+    engine = load_engine(cfg, args, language, selection)
 
-    selection = None if stdout_mode else select_insertion()
-    if selection is not None and selection.inserter is None:
-        print(selection.description, file=sys.stderr)
-        sys.exit(1)
     output = TextOutput(stdout_mode, selection.inserter if selection else None)
     insertion: str = "stdout" if stdout_mode else selection.description
     daemon = Daemon(hotkey_code, engine, output, language)

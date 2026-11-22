@@ -29,9 +29,6 @@ class _RecordingClipboard:
         self.calls: list[tuple[str, str]] = []
         self._fail = fail
 
-    def read(self):
-        return MagicMock()
-
     def write(self, text: str) -> None:
         if self._fail:
             raise ClipboardError("wl-copy failed (exit 1)")
@@ -324,10 +321,4 @@ class TestSelectInsertion:
         selection = select_insertion(which=_which("ydotool"), session_type="")
 
         assert isinstance(selection.inserter, TypingInserter)
-
-
-class TestDescription:
-    def test_typing_description_names_tool(self) -> None:
-        selection = select_insertion(which=_which("ydotool"), session_type="x11")
-
         assert selection.description == "typing (ydotool)"

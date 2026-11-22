@@ -5,14 +5,13 @@ from dataclasses import dataclass
 
 from .base import TextInserter
 from .chord import PasteChord, WtypeChord, YdotoolChord
-from .clipboard import WaylandClipboard
+from .clipboard import WL_CLIPBOARD_INSTALL, WaylandClipboard
 from .clipboard_inserter import ClipboardInserter
 from .typing import TypingInserter
 
 Which = Callable[[str], str | None]
 
 WAYLAND_SESSION = "wayland"
-WL_CLIPBOARD_INSTALL = "sudo apt install wl-clipboard"
 
 
 @dataclass(frozen=True)
@@ -74,5 +73,5 @@ def _clipboard_problem(session: str, which: Which) -> str | None:
     if session != WAYLAND_SESSION:
         return "the Wayland clipboard backend needs a Wayland session"
     if not which("wl-copy") or not which("wl-paste"):
-        return f"wl-copy/wl-paste not found — install it: {WL_CLIPBOARD_INSTALL}"
+        return f"wl-copy/wl-paste not found — {WL_CLIPBOARD_INSTALL}"
     return None

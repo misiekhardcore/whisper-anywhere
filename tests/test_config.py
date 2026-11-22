@@ -184,10 +184,9 @@ class TestCheckDepsInsertion:
         with (
             self._present_dependencies(),
             patch.dict(sys.modules, {"vosk": MagicMock()}),
-            patch("whisper_anywhere.config.select_insertion", return_value=selection),
             pytest.raises(SystemExit) as exc,
         ):
-            Config.check_deps("vosk")
+            Config.check_deps("vosk", selection)
 
         assert exc.value.code == 1
         assert "sudo apt install ydotool" in capsys.readouterr().err
@@ -203,9 +202,8 @@ class TestCheckDepsInsertion:
         with (
             self._present_dependencies(),
             patch.dict(sys.modules, {"vosk": MagicMock()}),
-            patch("whisper_anywhere.config.select_insertion", return_value=selection),
         ):
-            Config.check_deps("vosk")
+            Config.check_deps("vosk", selection)
 
         assert "sudo apt install wl-clipboard" in capsys.readouterr().err
 
@@ -213,11 +211,8 @@ class TestCheckDepsInsertion:
         with (
             self._present_dependencies(),
             patch.dict(sys.modules, {"vosk": MagicMock()}),
-            patch("whisper_anywhere.config.select_insertion") as select,
         ):
-            Config.check_deps("vosk", require_insertion=False)
-
-        select.assert_not_called()
+            Config.check_deps("vosk")
 
 
 def test_config_dir_constant() -> None:
