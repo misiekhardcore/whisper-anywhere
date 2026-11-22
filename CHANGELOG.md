@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
 ### Changed
 
 - A dictation is transcribed once, over the whole hotkey hold, and inserted once; the streaming mode that retyped text while you were still speaking is gone
@@ -26,10 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--stdout` is honoured when passed as a flag again; the mode check used to treat the boolean flag as one of the `1`/`true`/`yes` config strings
 
 ## [1.1.3] - 2026-10-13
+
 ### Fixed
 
 - Add missing pyav19 package install
+
 ## [1.1.2] - 2026-10-13
+
 ### Changed
 
 - Cleanup
@@ -37,18 +41,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Add missing pytorch package install
+
 ## [1.1.1] - 2026-06-16
+
 ### Fixed
 
 - Prefer YdotoolTyper over ClipboardTyper in probe order
+
 ## [1.1.0] - 2026-06-15
+
 ### Changed
 
 - Add --version CLI flag
 - Refactor transcribe/ and vad/ into sub-packages, config/keyboard into classes
 - Abstract text typing into Typer interface with WtypeTyper and YdotoolTyper
 - Release v1.0.0
+
 ## [1.0.0] - 2026-06-15
+
 ### Added
 
 - Systemd user service autostart + uninstall script + doc fixes
@@ -60,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Drop Python 3.9 support, require >=3.10
 - Add Vosk as a transcription engine
 - Add pre-commit hooks for linting and tests
-- Split __main__.py into focused modules
+- Split **main**.py into focused modules
 - Only backspace and retype the changed suffix in partial/final updates
 - Live streaming mode with VAD-gated phrase transcription
 - Formal Transcriber Protocol + extensible engine registry
@@ -97,7 +107,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 
 - End-to-end dictation pipeline test
+
 ## [0.1.0] - 2026-06-11
+
 ### Changed
 
 - Initial commit

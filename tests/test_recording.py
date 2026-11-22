@@ -66,6 +66,7 @@ class TestFinishRecording:
         recorder: Recorder = Recorder(engine, None, TextOutput(False))
 
         with (
+            patch("whisper_anywhere.recording.stop_recording") as stop,
             patch("whisper_anywhere.recording.write_wav"),
             patch.object(TextOutput, "emit", new_callable=AsyncMock) as mock_emit,
         ):

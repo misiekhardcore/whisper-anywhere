@@ -150,40 +150,40 @@ Downloaded automatically on first use. Default engine uses SenseVoice via [FunAS
 
 ### SenseVoice (default, `--engine sensevoice`)
 
-| Model | Size | Notes |
-|---|---|---|
+| Model                 | Size    | Notes                                                                                                           |
+| --------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
 | `iic/SenseVoiceSmall` | ~120 MB | Default, MIT license, 15-17x faster than Whisper on CPU. **Explicit language codes**: zh, en, yue, ja, ko only. |
 
 ### faster-whisper (`--engine faster-whisper`)
 
-| Model | Size | Quality | Language |
-|---|---|---|---|
-| `distil-large-v3` | 1.5 GB | Best | Multilingual (default when a non-English language is requested) |
-| `distil-medium.en` | 300 MB | Better | English only |
-| `distil-small.en` | 94 MB | Good | English only |
+| Model              | Size   | Quality | Language                                                        |
+| ------------------ | ------ | ------- | --------------------------------------------------------------- |
+| `distil-large-v3`  | 1.5 GB | Best    | Multilingual (default when a non-English language is requested) |
+| `distil-medium.en` | 300 MB | Better  | English only                                                    |
+| `distil-small.en`  | 94 MB  | Good    | English only                                                    |
 
 Set via config or `--model`. When you request a non-English language without specifying a model, `distil-large-v3` is automatically selected.
 
 ### Vosk (`--engine vosk`)
 
-| Model | Size | Languages |
-|---|---|---|
-| `vosk-model-small-en-us-0.15` | ~40 MB | English |
-| `vosk-model-small-pl-0.22` | ~50 MB | Polish |
-| `vosk-model-small-de-0.15` | ~40 MB | German |
-| `vosk-model-small-fr-0.22` | ~50 MB | French |
-| `vosk-model-small-es-0.22` | ~50 MB | Spanish |
-| `vosk-model-small-pt-0.3` | ~50 MB | Portuguese |
-| `vosk-model-small-ru-0.22` | ~50 MB | Russian |
-| `vosk-model-small-it-0.22` | ~50 MB | Italian |
-| `vosk-model-small-nl-0.22` | ~50 MB | Dutch |
-| `vosk-model-small-tr-0.3` | ~50 MB | Turkish |
-| `vosk-model-small-vn-0.3` | ~50 MB | Vietnamese |
-| `vosk-model-small-ja-0.22` | ~50 MB | Japanese |
-| `vosk-model-small-cn-0.22` | ~50 MB | Chinese |
-| `vosk-model-small-hi-0.22` | ~50 MB | Hindi |
-| `vosk-model-small-ar-0.22` | ~40 MB | Arabic |
-| `vosk-model-small-fa-0.5` | ~50 MB | Persian |
+| Model                         | Size   | Languages  |
+| ----------------------------- | ------ | ---------- |
+| `vosk-model-small-en-us-0.15` | ~40 MB | English    |
+| `vosk-model-small-pl-0.22`    | ~50 MB | Polish     |
+| `vosk-model-small-de-0.15`    | ~40 MB | German     |
+| `vosk-model-small-fr-0.22`    | ~50 MB | French     |
+| `vosk-model-small-es-0.22`    | ~50 MB | Spanish    |
+| `vosk-model-small-pt-0.3`     | ~50 MB | Portuguese |
+| `vosk-model-small-ru-0.22`    | ~50 MB | Russian    |
+| `vosk-model-small-it-0.22`    | ~50 MB | Italian    |
+| `vosk-model-small-nl-0.22`    | ~50 MB | Dutch      |
+| `vosk-model-small-tr-0.3`     | ~50 MB | Turkish    |
+| `vosk-model-small-vn-0.3`     | ~50 MB | Vietnamese |
+| `vosk-model-small-ja-0.22`    | ~50 MB | Japanese   |
+| `vosk-model-small-cn-0.22`    | ~50 MB | Chinese    |
+| `vosk-model-small-hi-0.22`    | ~50 MB | Hindi      |
+| `vosk-model-small-ar-0.22`    | ~40 MB | Arabic     |
+| `vosk-model-small-fa-0.5`     | ~50 MB | Persian    |
 
 Models are auto-downloaded on first use to `~/.cache/vosk/`. Set the language code (e.g. `pl`, `de`, `fr`) via `--language` or the config file to auto-select the matching model. Alternatively, specify any model name directly with `--model`.
 
