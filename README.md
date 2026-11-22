@@ -88,8 +88,15 @@ Either way: hold the hotkey, speak, release. Text appears wherever your cursor i
 The transcript is written to the system clipboard and a single paste chord is sent,
 so the focused application receives one paste instead of a keystroke stream. The
 preferred path is `wl-copy`/`wl-paste` (Wayland) plus `ydotool` sending Ctrl+V;
-`wtype` sends the chord only when `ydotool` is absent. After a successful paste the
-transcript is left on the clipboard.
+`wtype` sends the chord only when `ydotool` is absent.
+
+Dictating does not cost you your clipboard. The clipboard text you had before
+dictating is restored after the paste lands, but only while the clipboard still
+holds the transcript; if something else changed it in the meantime, the old text is
+dropped instead of overwriting the new content. Clipboard content that is not text -
+an image or a file list, for example - cannot be snapshotted, so the transcript
+replaces it permanently. When the clipboard write fails no paste is sent, and when
+the paste fails the transcript stays on the clipboard so you can paste it yourself.
 
 When no clipboard backend is available, or the session is not Wayland, insertion
 falls back to typing the transcript through `ydotool` (or `wtype`) and reports why.
