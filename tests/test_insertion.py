@@ -15,6 +15,7 @@ from whisper_anywhere.insertion import (
     YdotoolChord,
     select_insertion,
 )
+from whisper_anywhere.insertion.clipboard import Clipboard, ClipboardContent
 
 CHORD_COMMAND: list[str] = ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]
 WTYPE_CHORD_COMMAND: list[str] = ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"]
@@ -24,60 +25,142 @@ def _which(*available: str):
     return lambda command: f"/usr/bin/{command}" if command in available else None
 
 
-class _RecordingClipboard:
-    def __init__(self, fail: bool = False) -> None:
-        self.calls: list[tuple[str, str]] = []
-        self._fail = fail
+class _FakeClipboard(Clipboard):
+    """Stateful clipboard: one text payload, recorded calls, scripted write failure."""
+
+    def __init__(
+        self,
+        initial: str | None = "",
+        fail_on_write: int | None = None,
+        events: list[str] | None = None,
+    ) -> None:
+        self.text: str | None = initial
+        self.writes: list[str] = []
+        self.events: list[str] = events if events is not None else []
+        self._fail_on_write = fail_on_write
+
+    def read(self) -> ClipboardContent:
+        self.events.append("read")
+        return ClipboardContent(self.text)
 
     def write(self, text: str) -> None:
-        if self._fail:
+        self.writes.append(text)
+        self.events.append(f"write:{text}")
+        if self._fail_on_write == len(self.writes):
             raise ClipboardError("wl-copy failed (exit 1)")
-        self.calls.append(("write", text))
+        self.text = text
+
+    def replace_externally(self, text: str | None) -> None:
+        self.text = text
 
 
-class _RecordingChord:
+class _FakeChord:
     TOOL = "ydotool"
 
-    def __init__(self, fail: bool = False) -> None:
+    def __init__(
+        self,
+        fail: bool = False,
+        on_send=None,
+        events: list[str] | None = None,
+    ) -> None:
         self.sent: int = 0
+        self.events: list[str] = events if events is not None else []
         self._fail = fail
+        self._on_send = on_send
 
     def send(self) -> None:
         if self._fail:
             raise ChordError("ydotool key failed (exit 1)")
         self.sent += 1
+        self.events.append("chord")
+        if self._on_send is not None:
+            self._on_send()
+
+
+class _FakePause:
+    def __init__(self, events: list[str]) -> None:
+        self.delays: list[float] = []
+        self._events = events
+
+    def __call__(self, seconds: float) -> None:
+        self.delays.append(seconds)
+        self._events.append("pause")
 
 
 class TestClipboardInserter:
-    def test_writes_transcript_before_one_chord(self) -> None:
-        order: list[str] = []
-        clipboard: MagicMock = MagicMock()
-        clipboard.write.side_effect = lambda text: order.append(f"write:{text}")
-        chord: MagicMock = MagicMock()
-        chord.send.side_effect = lambda: order.append("chord")
-
-        ClipboardInserter(clipboard, chord).insert_text("hello")
-
-        assert order == ["write:hello", "chord"]
-
     def test_empty_text_inserts_nothing(self) -> None:
-        clipboard: _RecordingClipboard = _RecordingClipboard()
-        chord: _RecordingChord = _RecordingChord()
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard(events=events)
+        chord: _FakeChord = _FakeChord(events=events)
 
-        ClipboardInserter(clipboard, chord).insert_text("")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("")
 
-        assert clipboard.calls == []
+        assert clipboard.events == []
         assert chord.sent == 0
+
+    def test_restores_the_previous_clipboard_text(self) -> None:
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
+        chord: _FakeChord = _FakeChord(events=events)
+
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+
+        assert clipboard.writes == ["hello", "copied earlier"]
+
+    def test_restore_waits_for_the_settle_delay(self) -> None:
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
+        chord: _FakeChord = _FakeChord(events=events)
+        pause: _FakePause = _FakePause(events)
+
+        ClipboardInserter(clipboard, chord, pause).insert_text("hello")
+
+        assert events == [
+            "read",
+            "write:hello",
+            "chord",
+            "pause",
+            "read",
+            "write:copied earlier",
+        ]
+        assert pause.delays == [0.2]
+
+    def test_changed_clipboard_is_not_overwritten(self) -> None:
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
+        chord: _FakeChord = _FakeChord(
+            events=events,
+            on_send=lambda: clipboard.replace_externally("something else"),
+        )
+
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+
+        assert clipboard.writes == ["hello"]
+        assert clipboard.text == "something else"
+
+    def test_non_text_clipboard_is_overwritten_without_restore(self) -> None:
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard(None, events=events)
+        chord: _FakeChord = _FakeChord(events=events)
+
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+
+        assert clipboard.writes == ["hello"]
+        assert clipboard.text == "hello"
 
     def test_failed_write_sends_no_chord_and_reports(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        clipboard: _RecordingClipboard = _RecordingClipboard(fail=True)
-        chord: _RecordingChord = _RecordingChord()
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard(
+            "copied earlier", fail_on_write=1, events=events
+        )
+        chord: _FakeChord = _FakeChord(events=events)
 
-        ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
 
         assert chord.sent == 0
+        assert clipboard.text == "copied earlier"
         err: str = capsys.readouterr().err
         assert "Clipboard insertion failed" in err
         assert "wl-copy failed" in err
@@ -85,15 +168,31 @@ class TestClipboardInserter:
     def test_failed_chord_reports_transcript_left_on_clipboard(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        clipboard: _RecordingClipboard = _RecordingClipboard()
-        chord: _RecordingChord = _RecordingChord(fail=True)
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
+        chord: _FakeChord = _FakeChord(fail=True, events=events)
 
-        ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
 
-        assert clipboard.calls == [("write", "hello")]
+        assert clipboard.writes == ["hello"]
+        assert clipboard.text == "hello"
         err: str = capsys.readouterr().err
         assert "Paste chord failed" in err
         assert "transcript left on the clipboard" in err
+
+    def test_failed_restore_reports_and_keeps_the_transcript(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard(
+            "copied earlier", fail_on_write=2, events=events
+        )
+        chord: _FakeChord = _FakeChord(events=events)
+
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+
+        assert chord.sent == 1
+        assert "Clipboard restore failed" in capsys.readouterr().err
 
 
 class TestWaylandClipboard:
@@ -290,12 +389,14 @@ class TestSelectInsertion:
         assert isinstance(selection.inserter, ClipboardInserter)
         with patch("subprocess.run") as run:
             run.side_effect = [
+                MagicMock(returncode=0, stdout="image/png\n"),
                 MagicMock(returncode=0),
                 MagicMock(returncode=0),
             ]
             selection.inserter.insert_text("hello")
 
-        assert run.call_args_list[1].args[0] == WTYPE_CHORD_COMMAND
+        commands: list[list[str]] = [call.args[0] for call in run.call_args_list]
+        assert commands[-1] == WTYPE_CHORD_COMMAND
 
     def test_no_chord_injector_reports_ydotool(self) -> None:
         selection = select_insertion(
