@@ -13,14 +13,12 @@ from whisper_anywhere.insertion import (
     WaylandClipboard,
     WtypeChord,
     YdotoolChord,
-    clipboard_inserter,
     select_insertion,
 )
 from whisper_anywhere.insertion.clipboard import Clipboard, ClipboardContent
 
 CHORD_COMMAND: list[str] = ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]
 WTYPE_CHORD_COMMAND: list[str] = ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"]
-SLEEP = "whisper_anywhere.insertion.clipboard_inserter.sleep"
 
 
 def _which(*available: str):
@@ -79,29 +77,24 @@ class _FakeChord:
             self._on_send()
 
 
-def _sleeps_into(events: list[str]):
-    return lambda seconds: events.append("sleep")
+class _FakePause:
+    def __init__(self, events: list[str]) -> None:
+        self.delays: list[float] = []
+        self._events = events
+
+    def __call__(self, seconds: float) -> None:
+        self.delays.append(seconds)
+        self._events.append("pause")
 
 
 class TestClipboardInserter:
-    def test_writes_transcript_before_one_chord(self) -> None:
+    def test_empty_text_inserts_nothing(self) -> None:
         events: list[str] = []
         clipboard: _FakeClipboard = _FakeClipboard(events=events)
         chord: _FakeChord = _FakeChord(events=events)
 
-        with patch(SLEEP, _sleeps_into(events)):
-            ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("")
 
-        assert events[:2] == ["read", "write:hello"]
-        assert chord.sent == 1
-
-    def test_empty_text_inserts_nothing(self) -> None:
-        clipboard: _FakeClipboard = _FakeClipboard(events=[])
-        chord: _FakeChord = _FakeChord(events=[])
-
-        ClipboardInserter(clipboard, chord).insert_text("")
-
-        assert clipboard.writes == []
         assert clipboard.events == []
         assert chord.sent == 0
 
@@ -110,30 +103,27 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
         chord: _FakeChord = _FakeChord(events=events)
 
-        with patch(SLEEP, _sleeps_into(events)):
-            ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
 
         assert clipboard.writes == ["hello", "copied earlier"]
-        assert clipboard.text == "copied earlier"
 
     def test_restore_waits_for_the_settle_delay(self) -> None:
         events: list[str] = []
         clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
         chord: _FakeChord = _FakeChord(events=events)
+        pause: _FakePause = _FakePause(events)
 
-        with patch(SLEEP) as sleep:
-            sleep.side_effect = _sleeps_into(events)
-            ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, pause).insert_text("hello")
 
         assert events == [
             "read",
             "write:hello",
             "chord",
-            "sleep",
+            "pause",
             "read",
             "write:copied earlier",
         ]
-        assert sleep.call_args.args == (clipboard_inserter.SETTLE_DELAY_SECONDS,)
+        assert pause.delays == [0.2]
 
     def test_changed_clipboard_is_not_overwritten(self) -> None:
         events: list[str] = []
@@ -143,8 +133,7 @@ class TestClipboardInserter:
             on_send=lambda: clipboard.replace_externally("something else"),
         )
 
-        with patch(SLEEP, _sleeps_into(events)):
-            ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
 
         assert clipboard.writes == ["hello"]
         assert clipboard.text == "something else"
@@ -154,8 +143,7 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard(None, events=events)
         chord: _FakeChord = _FakeChord(events=events)
 
-        with patch(SLEEP, _sleeps_into(events)):
-            ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
 
         assert clipboard.writes == ["hello"]
         assert clipboard.text == "hello"
@@ -169,8 +157,7 @@ class TestClipboardInserter:
         )
         chord: _FakeChord = _FakeChord(events=events)
 
-        with patch(SLEEP, _sleeps_into(events)):
-            ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
 
         assert chord.sent == 0
         assert clipboard.text == "copied earlier"
@@ -185,8 +172,7 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
         chord: _FakeChord = _FakeChord(fail=True, events=events)
 
-        with patch(SLEEP, _sleeps_into(events)):
-            ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
 
         assert clipboard.writes == ["hello"]
         assert clipboard.text == "hello"
@@ -203,8 +189,7 @@ class TestClipboardInserter:
         )
         chord: _FakeChord = _FakeChord(events=events)
 
-        with patch(SLEEP, _sleeps_into(events)):
-            ClipboardInserter(clipboard, chord).insert_text("hello")
+        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
 
         assert chord.sent == 1
         assert "Clipboard restore failed" in capsys.readouterr().err
