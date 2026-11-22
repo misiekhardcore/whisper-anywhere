@@ -9,7 +9,6 @@ from whisper_anywhere.transcribe import (
     SenseVoiceTranscriber,
     VoskTranscriber,
 )
-from whisper_anywhere.vad import FsmnVAD
 
 
 class Config:
@@ -58,7 +57,7 @@ class Config:
                         file=sys.stderr,
                     )
                     sys.exit(1)
-            case SenseVoiceTranscriber.ENGINE_ID | FsmnVAD.ENGINE_ID:
+            case SenseVoiceTranscriber.ENGINE_ID:
                 try:
                     import funasr  # noqa: F401
                 except ImportError:
@@ -131,14 +130,6 @@ class Config:
             "--stdout",
             action="store_true",
             help="Write transcribed text as JSON lines to stdout instead of ydotool",
-        )
-        p.add_argument(
-            "--vad",
-            nargs="?",
-            default=None,
-            const=FsmnVAD.ENGINE_ID,
-            metavar="ENGINE",
-            help="VAD engine for live streaming (default: fsmn-vad). Use --vad=off to disable.",
         )
         return p.parse_args()
 

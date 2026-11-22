@@ -66,6 +66,13 @@ class TestLoadConfig:
             result: dict[str, str] = Config.load_config(str(path))
             assert result == {"key": "value"}
 
+    def test_retired_vad_engine_key_is_parsed_without_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path: Path = Path(tmp) / "config"
+            path.write_text("hotkey=KEY_F12\nvad_engine=fsmn-vad\n")
+            result: dict[str, str] = Config.load_config(str(path))
+            assert result["hotkey"] == "KEY_F12"
+
 
 class TestParseArgs:
     def test_defaults(self) -> None:
@@ -121,29 +128,11 @@ class TestParseArgs:
         with patch.object(sys, "argv", ["whisper-anywhere", "--engine", "sensevoice"]):
             assert Config.parse_args().engine == "sensevoice"
 
-    def test_vad_default_none(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere"]):
-            assert Config.parse_args().vad is None
-
-    def test_vad_without_value_uses_const(self) -> None:
+    def test_retired_vad_flag_is_rejected(self) -> None:
         with patch.object(sys, "argv", ["whisper-anywhere", "--vad"]):
-            assert Config.parse_args().vad == "fsmn-vad"
-
-    def test_vad_explicit_engine(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere", "--vad", "fsmn-vad"]):
-            assert Config.parse_args().vad == "fsmn-vad"
-
-    def test_vad_off(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere", "--vad=off"]):
-            assert Config.parse_args().vad == "off"
-
-    def test_vad_false(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere", "--vad=false"]):
-            assert Config.parse_args().vad == "false"
-
-    def test_vad_zero(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere", "--vad=0"]):
-            assert Config.parse_args().vad == "0"
+            with pytest.raises(SystemExit) as exc:
+                Config.parse_args()
+            assert exc.value.code == 2
 
 
 class TestVersion:

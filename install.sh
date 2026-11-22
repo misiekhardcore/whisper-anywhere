@@ -58,7 +58,7 @@ step_system_packages() {
 step_python_packages() {
     echo ""
     echo "==> Installing Python packages..."
-    # SenseVoice and FSMN-VAD run on CPU and require PyTorch.
+    # SenseVoice runs on CPU and requires PyTorch.
     "$PYTHON" -m pip install --user torch torchaudio \
         --index-url https://download.pytorch.org/whl/cpu 2>/dev/null \
         || "$PYTHON" -m pip install --user --break-system-packages \
@@ -111,18 +111,6 @@ sys.stderr.write('Downloading model $MODEL...\n')
 m = AutoModel(model='$MODEL', device='cpu')
 sys.stderr.write('Model $MODEL ready.\n')
 " 2>/dev/null || warn "model pre-load skipped (will download on first use)"
-}
-
-step_vad_model() {
-    echo ""
-    echo "==> Pre-loading VAD model (fsmn-vad)..."
-    "$PYTHON" -c "
-from funasr import AutoModel
-import sys
-sys.stderr.write('Downloading VAD model fsmn-vad...\n')
-m = AutoModel(model='fsmn-vad', device='cpu')
-sys.stderr.write('VAD model fsmn-vad ready.\n')
-" 2>/dev/null || warn "VAD model pre-load skipped (will download on first use)"
 }
 
 step_install_package() {
@@ -189,12 +177,6 @@ step_config() {
 #
 # Uncomment to force a language (default: auto-detect):
 # language=en
-#
-# VAD engine for live streaming (fsmn-vad):
-# vad_engine=fsmn-vad
-#
-# Set vad=off to disable live streaming (batch mode):
-# vad=off
 EOF
         if [ -n "$HOTKEY" ]; then
             echo "hotkey=$HOTKEY" >> "$CONFIG_DIR/config"
@@ -269,7 +251,6 @@ fi
 step_python_packages
 step_install_package
 step_model
-step_vad_model
 step_config
 step_service
 summary

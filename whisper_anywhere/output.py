@@ -36,42 +36,6 @@ class TextOutput:
         if not text:
             return
         if self._stdout_mode:
-            print(json.dumps({"text": text}), flush=True)
+            print(json.dumps({"type": "final", "text": text}), flush=True)
             return
         self._get_typer().type_text(text)
-
-    def emit_partial(self, prev_text: str, new_text: str) -> None:
-        if prev_text == new_text:
-            return
-        if self._stdout_mode:
-            print(json.dumps({"type": "partial", "text": new_text}), flush=True)
-            return
-        prefix_len = self._common_prefix_len(prev_text, new_text)
-        del_len = len(prev_text) - prefix_len
-        suffix = new_text[prefix_len:]
-        self._get_typer().backspace(del_len)
-        if suffix:
-            self._get_typer().type_text(suffix)
-
-    def emit_final(self, prev_text: str, final_text: str) -> None:
-        if self._stdout_mode:
-            if final_text:
-                print(json.dumps({"type": "final", "text": final_text}), flush=True)
-            return
-        if prev_text == final_text:
-            return
-        prefix_len = self._common_prefix_len(prev_text, final_text)
-        del_len = len(prev_text) - prefix_len
-        suffix = final_text[prefix_len:]
-        self._get_typer().backspace(del_len)
-        if suffix:
-            self._get_typer().type_text(suffix)
-
-    @staticmethod
-    def _common_prefix_len(a: str, b: str) -> int:
-        n = 0
-        for ca, cb in zip(a, b):
-            if ca != cb:
-                break
-            n += 1
-        return n

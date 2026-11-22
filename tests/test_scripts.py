@@ -112,6 +112,7 @@ class TestInstallUninstall:
         assert "hotkey" in text
         assert "model" in text
         assert "language" in text
+        assert "vad" not in text.lower()
 
         service: Path = (
             fake_home / ".config" / "systemd" / "user" / "whisper-anywhere.service"

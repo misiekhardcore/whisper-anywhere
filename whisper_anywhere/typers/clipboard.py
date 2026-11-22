@@ -7,7 +7,6 @@ from .base import Typer
 class ClipboardTyper(Typer):
     _KEY_LEFTCTRL = 29
     _KEY_V = 47
-    _KEY_BACKSPACE = 14
 
     @staticmethod
     def _save_clipboard() -> str | None:
@@ -54,17 +53,3 @@ class ClipboardTyper(Typer):
         self._paste()
         if saved is not None:
             self._copy(saved)
-
-    def backspace(self, n: int) -> None:
-        if n <= 0:
-            return
-        try:
-            subprocess.run(
-                ["ydotool", "key"]
-                + [f"{self._KEY_BACKSPACE}:1", f"{self._KEY_BACKSPACE}:0"] * n
-            )
-        except FileNotFoundError:
-            print(
-                "ydotool not found — is it installed and on PATH?",
-                file=sys.stderr,
-            )

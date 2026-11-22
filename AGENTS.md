@@ -24,16 +24,16 @@ The daemon is a Python package `whisper_anywhere/` installed via `pip install -e
 ```
 whisper_anywhere/
 ├── __init__.py
-├── __main__.py      # entry point: main(), config resolution (load_hotkey, load_engine, load_vad)
+├── __main__.py      # entry point: main(), config resolution (load_hotkey, load_engine)
 ├── audio.py         # write_wav(), read_audio(), stop_recording(), runtime paths
 ├── config.py        # check_deps(), load_config(), parse_args(), runtime_dir()
-├── daemon.py        # run_daemon(), _pump_device(), keyboard device handling
+├── daemon.py        # Daemon.run(), _pump_device(), keyboard device handling
 ├── keyboard.py      # find_keyboards(), keys_held()
 ├── lock.py          # acquire_lock(), _remove_lock(), LOCK_PATH
-├── output.py        # emit(), emit_partial(), emit_final(), _backspace(), _common_prefix_len()
-├── recording.py     # _start_recording(), _live_vad_loop(), _finish_recording()
-├── transcribe.py    # load_engine(), Transcriber protocol
-└── vad.py           # load_vad(), VAD protocol
+├── output.py        # emit()
+├── recording.py     # Recording, Recorder.start(), Recorder.finish()
+├── transcribe/      # load_engine(), Transcriber protocol, one module per engine
+└── typers/          # Typer protocol, ydotool / wtype / clipboard implementations
 ```
 
 ## System dependencies (apt only)
@@ -61,13 +61,14 @@ whisper_anywhere/
 ## Script architecture
 
 - `find_keyboards()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
-- `check_deps(engine)` — verifies `parec`, `ydotool` are on PATH, `evdev` imports, and the selected engine's package (`funasr` or `faster_whisper`) is importable
+- `check_deps(engine)` — verifies `parec` is on PATH, `evdev` imports, and the selected engine's package is importable (`funasr` for SenseVoice only, `faster_whisper`, or `vosk`)
 - `load_model()` — initializes the transcription engine (default: SenseVoice via `funasr.AutoModel`). Pluggable via the `Transcriber` protocol — see `register_engine()`.
 - `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
 - `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
-- `transcribe()` — stops `parec` via `stop_recording()`, drains remaining audio via `read_audio`, writes WAV, runs model (with optional `language`). Returns text.
-- `emit()` — delivers text: `ydotool type` (checking the return code / `FileNotFoundError`) or stdout JSON in `--stdout` mode.
-- `run_daemon()` — async evdev read loop; spawns `parec --raw` as an `asyncio.subprocess` on hotkey press, pipes audio through `read_audio` into a `bytearray` buffer, calls `transcribe()` on release. Wrapped in a loop that re-acquires the keyboard on hotplug/`OSError`.
+- `Recorder.start()` — spawns `parec --raw` and returns a `Recording` (process, reader task, PCM buffer)
+- `Recorder.finish()` — stops `parec` via `stop_recording()`, drains the remaining audio, writes the WAV, runs the engine once over the whole recording and emits the transcript once. An empty recording, a blank transcript and an engine error all end quietly with a line on stderr.
+- `emit()` — delivers text: `ydotool type` (checking the return code / `FileNotFoundError`) or one `{"type": "final", "text": ...}` line in `--stdout` mode.
+- `Daemon.run()` — async evdev read loop; a hotkey press starts a `Recorder.start()`, the matching release calls `Recorder.finish()`. One dictation is one engine call and one emission. Wrapped in a loop that re-acquires the keyboard on hotplug/`OSError`.
 - `read_audio()` caps a single recording at `MAX_RECORDING_SECONDS` (60s) so a stuck hotkey can't run `parec` forever.
 - Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample
 - `parec` is started with `--latency-msec=30` to shrink PulseAudio's internal capture buffer from ~250ms to 30ms, so the tail loss on SIGINT is imperceptible

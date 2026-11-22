@@ -10,7 +10,6 @@ from .daemon import Daemon
 from .lock import Lock
 from .output import TextOutput
 from .transcribe import Transcriber
-from .vad import VAD
 
 
 def load_hotkey(cfg: dict, args: Namespace) -> int | None:
@@ -33,16 +32,6 @@ def load_engine(cfg: dict, args: Namespace, language: str | None = None) -> Tran
     return load_engine(engine_id, model_id, language)
 
 
-def load_vad(cfg: dict, args: Namespace) -> VAD | None:
-    from .vad import DEFAULT_VAD_ENGINE, load_vad
-
-    vad_engine_id = args.vad or cfg.get("vad_engine", DEFAULT_VAD_ENGINE)
-    if vad_engine_id.lower() in ("off", "false", "0"):
-        return None
-    Config.check_deps(vad_engine_id)
-    return load_vad(vad_engine_id)
-
-
 def main():
     signal.signal(signal.SIGINT, Config.handler)
     signal.signal(signal.SIGTERM, Config.handler)
@@ -56,14 +45,13 @@ def main():
     hotkey_code = load_hotkey(cfg, args)
     language = args.language or cfg.get("language")
     engine = load_engine(cfg, args, language)
-    vad = load_vad(cfg, args)
 
     output = TextOutput(stdout_mode)
-    daemon = Daemon(hotkey_code, engine, output, language, vad)
+    daemon = Daemon(hotkey_code, engine, output, language)
 
     lang_str = language or "auto-detect"
     print(
-        f"whisper-anywhere ready — engine: {engine.ENGINE_ID}, hotkey: {f'single-key ({hotkey_code})' if hotkey_code is not None else 'combo (Ctrl+Super+Space)'}, language: {lang_str}{f', live ({vad.ENGINE_ID})' if vad else ''}, stdout: {stdout_mode}",
+        f"whisper-anywhere ready — engine: {engine.ENGINE_ID}, hotkey: {f'single-key ({hotkey_code})' if hotkey_code is not None else 'combo (Ctrl+Super+Space)'}, language: {lang_str}, stdout: {stdout_mode}",
         file=sys.stderr,
     )
 
