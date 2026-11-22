@@ -1,77 +1,26 @@
+import asyncio
 import json
-import shutil
 import sys
 
-from .typers import ClipboardTyper, Typer, WtypeTyper, YdotoolTyper
+from .insertion import TextInserter
 
 
 class TextOutput:
-    def __init__(self, stdout_mode: bool) -> None:
+    def __init__(self, stdout_mode: bool, inserter: TextInserter | None = None) -> None:
         self._stdout_mode = stdout_mode
-        self._typer: Typer | None = None
+        self._inserter = inserter
 
-    @staticmethod
-    def _probe_typer() -> Typer | None:
-        if shutil.which("wtype") and WtypeTyper._check_compositor():
-            return WtypeTyper()
-        if shutil.which("ydotool"):
-            return YdotoolTyper()
-        if shutil.which("wl-copy") and shutil.which("ydotool"):
-            return ClipboardTyper()
-        return None
-
-    def _get_typer(self) -> Typer:
-        if self._typer is None:
-            self._typer = self._probe_typer()
-            if self._typer is None:
-                print(
-                    "No typing tool found — ensure wl-clipboard and ydotool are installed.",
-                    file=sys.stderr,
-                )
-                print("  bash install.sh", file=sys.stderr)
-                sys.exit(1)
-        return self._typer
-
-    def emit(self, text: str | None) -> None:
+    async def emit(self, text: str | None) -> None:
+        """Deliver one finished transcript, off the event loop thread."""
         if not text:
             return
         if self._stdout_mode:
-            print(json.dumps({"text": text}), flush=True)
+            print(json.dumps({"type": "final", "text": text}), flush=True)
             return
-        self._get_typer().type_text(text)
-
-    def emit_partial(self, prev_text: str, new_text: str) -> None:
-        if prev_text == new_text:
-            return
-        if self._stdout_mode:
-            print(json.dumps({"type": "partial", "text": new_text}), flush=True)
-            return
-        prefix_len = self._common_prefix_len(prev_text, new_text)
-        del_len = len(prev_text) - prefix_len
-        suffix = new_text[prefix_len:]
-        self._get_typer().backspace(del_len)
-        if suffix:
-            self._get_typer().type_text(suffix)
-
-    def emit_final(self, prev_text: str, final_text: str) -> None:
-        if self._stdout_mode:
-            if final_text:
-                print(json.dumps({"type": "final", "text": final_text}), flush=True)
-            return
-        if prev_text == final_text:
-            return
-        prefix_len = self._common_prefix_len(prev_text, final_text)
-        del_len = len(prev_text) - prefix_len
-        suffix = final_text[prefix_len:]
-        self._get_typer().backspace(del_len)
-        if suffix:
-            self._get_typer().type_text(suffix)
-
-    @staticmethod
-    def _common_prefix_len(a: str, b: str) -> int:
-        n = 0
-        for ca, cb in zip(a, b):
-            if ca != cb:
-                break
-            n += 1
-        return n
+        assert self._inserter is not None, "insertion is resolved at startup"
+        try:
+            await asyncio.get_running_loop().run_in_executor(
+                None, self._inserter.insert_text, text
+            )
+        except Exception as exc:
+            print(f"Insertion failed: {exc}", file=sys.stderr)

@@ -3,11 +3,12 @@ import sys
 import tempfile
 from argparse import Namespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from whisper_anywhere.config import Config
+from whisper_anywhere.insertion import InsertionSelection, TextInserter
 
 
 class TestLoadConfig:
@@ -66,6 +67,13 @@ class TestLoadConfig:
             result: dict[str, str] = Config.load_config(str(path))
             assert result == {"key": "value"}
 
+    def test_retired_vad_engine_key_is_parsed_without_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path: Path = Path(tmp) / "config"
+            path.write_text("hotkey=KEY_F12\nvad_engine=fsmn-vad\n")
+            result: dict[str, str] = Config.load_config(str(path))
+            assert result["hotkey"] == "KEY_F12"
+
 
 class TestParseArgs:
     def test_defaults(self) -> None:
@@ -121,29 +129,11 @@ class TestParseArgs:
         with patch.object(sys, "argv", ["whisper-anywhere", "--engine", "sensevoice"]):
             assert Config.parse_args().engine == "sensevoice"
 
-    def test_vad_default_none(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere"]):
-            assert Config.parse_args().vad is None
-
-    def test_vad_without_value_uses_const(self) -> None:
+    def test_retired_vad_flag_is_rejected(self) -> None:
         with patch.object(sys, "argv", ["whisper-anywhere", "--vad"]):
-            assert Config.parse_args().vad == "fsmn-vad"
-
-    def test_vad_explicit_engine(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere", "--vad", "fsmn-vad"]):
-            assert Config.parse_args().vad == "fsmn-vad"
-
-    def test_vad_off(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere", "--vad=off"]):
-            assert Config.parse_args().vad == "off"
-
-    def test_vad_false(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere", "--vad=false"]):
-            assert Config.parse_args().vad == "false"
-
-    def test_vad_zero(self) -> None:
-        with patch.object(sys, "argv", ["whisper-anywhere", "--vad=0"]):
-            assert Config.parse_args().vad == "0"
+            with pytest.raises(SystemExit) as exc:
+                Config.parse_args()
+            assert exc.value.code == 2
 
 
 class TestVersion:
@@ -171,6 +161,58 @@ class TestGetVersion:
     def test_fallback_on_exception(self) -> None:
         with patch("importlib.metadata.version", side_effect=Exception("no package")):
             assert Config._get_version() == "unknown"
+
+
+class _FakeInserter(TextInserter):
+    def insert_text(self, text: str) -> None: ...
+
+
+class TestCheckDepsInsertion:
+    @staticmethod
+    def _present_dependencies():
+        return patch(
+            "whisper_anywhere.config.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        )
+
+    def test_missing_inserter_exits_naming_package(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        selection: InsertionSelection = InsertionSelection(
+            None, "no insertion tool: install ydotool (sudo apt install ydotool)", None
+        )
+        with (
+            self._present_dependencies(),
+            patch.dict(sys.modules, {"vosk": MagicMock()}),
+            pytest.raises(SystemExit) as exc,
+        ):
+            Config.check_deps("vosk", selection)
+
+        assert exc.value.code == 1
+        assert "sudo apt install ydotool" in capsys.readouterr().err
+
+    def test_clipboard_warning_is_reported(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        selection: InsertionSelection = InsertionSelection(
+            _FakeInserter(),
+            "typing (ydotool)",
+            "Clipboard insertion unavailable: install it: sudo apt install wl-clipboard",
+        )
+        with (
+            self._present_dependencies(),
+            patch.dict(sys.modules, {"vosk": MagicMock()}),
+        ):
+            Config.check_deps("vosk", selection)
+
+        assert "sudo apt install wl-clipboard" in capsys.readouterr().err
+
+    def test_stdout_mode_skips_insertion_check(self) -> None:
+        with (
+            self._present_dependencies(),
+            patch.dict(sys.modules, {"vosk": MagicMock()}),
+        ):
+            Config.check_deps("vosk")
 
 
 def test_config_dir_constant() -> None:

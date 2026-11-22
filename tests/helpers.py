@@ -32,11 +32,3 @@ def _async_mock() -> MagicMock:
 
     m.wait = async_wait
     return m
-
-
-class _MockVAD:
-    def detect(self, audio: bytes, rate: int) -> list[tuple[int, int]]:
-        return [(0, 1000)]
-
-    def reset(self) -> None:
-        pass

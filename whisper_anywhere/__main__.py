@@ -7,10 +7,10 @@ from evdev import ecodes
 
 from .config import Config
 from .daemon import Daemon
+from .insertion import InsertionSelection, select_insertion
 from .lock import Lock
 from .output import TextOutput
 from .transcribe import Transcriber
-from .vad import VAD
 
 
 def load_hotkey(cfg: dict, args: Namespace) -> int | None:
@@ -24,23 +24,18 @@ def load_hotkey(cfg: dict, args: Namespace) -> int | None:
     return hotkey_code
 
 
-def load_engine(cfg: dict, args: Namespace, language: str | None = None) -> Transcriber:
+def load_engine(
+    cfg: dict,
+    args: Namespace,
+    language: str | None = None,
+    insertion: InsertionSelection | None = None,
+) -> Transcriber:
     from .transcribe import DEFAULT_ENGINE_ID, load_engine
 
     engine_id = args.engine or cfg.get("engine", DEFAULT_ENGINE_ID)
-    Config.check_deps(engine_id)
+    Config.check_deps(engine_id, insertion)
     model_id = args.model or cfg.get("model")
     return load_engine(engine_id, model_id, language)
-
-
-def load_vad(cfg: dict, args: Namespace) -> VAD | None:
-    from .vad import DEFAULT_VAD_ENGINE, load_vad
-
-    vad_engine_id = args.vad or cfg.get("vad_engine", DEFAULT_VAD_ENGINE)
-    if vad_engine_id.lower() in ("off", "false", "0"):
-        return None
-    Config.check_deps(vad_engine_id)
-    return load_vad(vad_engine_id)
 
 
 def main():
@@ -51,19 +46,20 @@ def main():
 
     args = Config.parse_args()
     cfg = Config.load_config()
-    stdout_mode = (args.stdout or cfg.get("stdout")) in ("1", "true", "yes")
+    stdout_mode: bool = args.stdout or cfg.get("stdout") in ("1", "true", "yes")
 
     hotkey_code = load_hotkey(cfg, args)
     language = args.language or cfg.get("language")
-    engine = load_engine(cfg, args, language)
-    vad = load_vad(cfg, args)
+    selection: InsertionSelection | None = None if stdout_mode else select_insertion()
+    engine = load_engine(cfg, args, language, selection)
 
-    output = TextOutput(stdout_mode)
-    daemon = Daemon(hotkey_code, engine, output, language, vad)
+    output = TextOutput(stdout_mode, selection.inserter if selection else None)
+    insertion: str = "stdout" if stdout_mode else selection.description
+    daemon = Daemon(hotkey_code, engine, output, language)
 
     lang_str = language or "auto-detect"
     print(
-        f"whisper-anywhere ready — engine: {engine.ENGINE_ID}, hotkey: {f'single-key ({hotkey_code})' if hotkey_code is not None else 'combo (Ctrl+Super+Space)'}, language: {lang_str}{f', live ({vad.ENGINE_ID})' if vad else ''}, stdout: {stdout_mode}",
+        f"whisper-anywhere ready — engine: {engine.ENGINE_ID}, hotkey: {f'single-key ({hotkey_code})' if hotkey_code is not None else 'combo (Ctrl+Super+Space)'}, language: {lang_str}, stdout: {stdout_mode}, insertion: {insertion}",
         file=sys.stderr,
     )
 

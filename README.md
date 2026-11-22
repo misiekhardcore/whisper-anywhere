@@ -8,15 +8,15 @@ Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, w
 
 ## How it works
 
-**Batch mode** (default, no VAD):
 1. Hold a hotkey (default: `Ctrl+Super+Space`, configurable to a single key like `F12`)
 2. Speak — audio is recorded via PulseAudio
-3. Release — the engine transcribes everything at once, `ydotool` types the text
+3. Release — the engine transcribes the whole hold in one pass and the transcript is
+   inserted once: written to the clipboard and pasted with a single Ctrl+V chord
 
-**Live mode** (`--vad` or `vad_engine=fsmn-vad`):
-1. Hold the hotkey and speak — VAD detects speech segments in real-time
-2. Each utterance is transcribed incrementally, with partial results replacing the previous text on screen
-3. Release the hotkey — remaining audio is transcribed and typed
+A dictation produces at most one transcript, and the daemon never revises text after
+it has been inserted. An empty hold, or a hold the engine hears as silence, produces
+no text. Release-to-text latency is the transcription time of the whole recording,
+which is why a single hold is capped at 60 seconds.
 
 ## Requirements
 
@@ -24,6 +24,8 @@ Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, w
 - **PulseAudio or PipeWire** (for `parec`)
 - **A Wayland or X11 desktop** — `ydotool` injects keystrokes via the kernel `uinput`
   device, so it works under either (tested on GNOME and KDE Plasma)
+- **`wl-clipboard`** (`wl-copy`/`wl-paste`) on Wayland, for the preferred clipboard
+  insertion; without it the transcript is typed instead
 - **systemd** (the daemon installs as a `systemd --user` service)
 
 ## Quick install
@@ -39,6 +41,8 @@ Or manually, step by step:
 ```bash
 # system dependencies
 sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool
+# on Wayland, the clipboard backend used for insertion
+sudo apt install wl-clipboard
 
 # Python packages (default: sensevoice via funasr)
 python3 -m pip install --user torch torchaudio \
@@ -79,6 +83,19 @@ whisper-anywhere
 
 Either way: hold the hotkey, speak, release. Text appears wherever your cursor is.
 
+### Insertion
+
+The transcript is written to the system clipboard and a single paste chord is sent,
+so the focused application receives one paste instead of a keystroke stream. The
+preferred path is `wl-copy`/`wl-paste` (Wayland) plus `ydotool` sending Ctrl+V;
+`wtype` sends the chord only when `ydotool` is absent. After a successful paste the
+transcript is left on the clipboard.
+
+When no clipboard backend is available, or the session is not Wayland, insertion
+falls back to typing the transcript through `ydotool` (or `wtype`) and reports why.
+The daemon prints the chosen insertion strategy on startup, and names the package to
+install when a tool is missing.
+
 ### Configuration
 
 Edit `~/.config/whisper-anywhere/config`, then `systemctl --user restart whisper-anywhere`:
@@ -100,13 +117,10 @@ hotkey=KEY_F12
 # only zh, en, yue, ja, ko — other codes are ignored (auto-detected).
 # With faster-whisper, any ISO 639-1 code works.
 # language=en
-#
-# VAD engine for live streaming (fsmn-vad):
-# vad_engine=fsmn-vad
-#
-# Disable live streaming and use batch mode:
-# vad=off
 ```
+
+A configuration file written for an older release may still contain keys this version
+no longer reads; they are ignored, so the daemon still starts.
 
 ### Command-line options
 
@@ -118,10 +132,15 @@ whisper-anywhere --engine vosk
 whisper-anywhere --model vosk-model-small-en-us-0.15
 whisper-anywhere --model distil-small.en
 whisper-anywhere --language en          # force language (SenseVoice: zh/en/yue/ja/ko; faster-whisper: any ISO 639-1; Vosk: any ISO 639-1)
-whisper-anywhere --vad                  # live mode with FSMN-VAD
-whisper-anywhere --vad=off              # explicit batch mode
 whisper-anywhere --stdout               # JSON lines output (for opencode plugin)
 ```
+
+### Stdout mode
+
+`--stdout` (or `stdout=1` in the config file) prints exactly one JSON line per
+dictation, shaped `{"type": "final", "text": "..."}`. A silent dictation prints
+nothing. Earlier releases also printed lines for text that was still being spoken;
+those are gone, so a consumer should treat every line as one finished transcript.
 
 > **opencode plugin**: [whisper-anywhere-opencode](https://github.com/misiekhardcore/whisper-anywhere-opencode) integrates dictation into the opencode TUI. Install via `npm install -g whisper-anywhere-opencode` and add to `opencode.json`.
 
@@ -182,10 +201,10 @@ whisper-anywhere/
 │   ├── daemon.py        # main event loop, keyboard device handling
 │   ├── keyboard.py      # evdev keyboard detection
 │   ├── lock.py          # single-instance lock
-│   ├── output.py        # text output (ydotool / stdout)
-│   ├── recording.py     # audio recording and VAD-gated live loop
-│   ├── transcribe.py    # model loading and engine registry
-│   └── vad.py           # voice activity detection
+│   ├── output.py        # text output (stdout / insertion)
+│   ├── recording.py     # one recording and one transcription per dictation
+│   ├── transcribe/      # model loading and engine registry
+│   └── insertion/       # clipboard backend, paste chord, clipboard and typing inserters
 ├── tests/               # pytest suite
 ├── install.sh           # one-shot installer
 ├── uninstall.sh         # reverses install.sh

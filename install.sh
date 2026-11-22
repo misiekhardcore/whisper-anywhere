@@ -50,15 +50,15 @@ step_system_packages() {
             python3-pip \
             ydotool
     if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-        info "Wayland detected — also installing wtype + wl-clipboard"
-        pkg_install wtype wl-clipboard
+        info "Wayland detected — also installing the clipboard backend (wl-clipboard)"
+        pkg_install wl-clipboard
     fi
 }
 
 step_python_packages() {
     echo ""
     echo "==> Installing Python packages..."
-    # SenseVoice and FSMN-VAD run on CPU and require PyTorch.
+    # SenseVoice runs on CPU and requires PyTorch.
     "$PYTHON" -m pip install --user torch torchaudio \
         --index-url https://download.pytorch.org/whl/cpu 2>/dev/null \
         || "$PYTHON" -m pip install --user --break-system-packages \
@@ -90,7 +90,7 @@ step_input_group() {
 
 step_ydotool_service() {
     echo ""
-    echo "==> Enabling ydotool systemd user service..."
+    echo "==> Enabling ydotool systemd user service (paste chord injector)..."
     systemctl --user enable --now ydotool.service 2>/dev/null || true
     if systemctl --user is-active ydotool.service &>/dev/null; then
         info "ydotool service is running"
@@ -111,18 +111,6 @@ sys.stderr.write('Downloading model $MODEL...\n')
 m = AutoModel(model='$MODEL', device='cpu')
 sys.stderr.write('Model $MODEL ready.\n')
 " 2>/dev/null || warn "model pre-load skipped (will download on first use)"
-}
-
-step_vad_model() {
-    echo ""
-    echo "==> Pre-loading VAD model (fsmn-vad)..."
-    "$PYTHON" -c "
-from funasr import AutoModel
-import sys
-sys.stderr.write('Downloading VAD model fsmn-vad...\n')
-m = AutoModel(model='fsmn-vad', device='cpu')
-sys.stderr.write('VAD model fsmn-vad ready.\n')
-" 2>/dev/null || warn "VAD model pre-load skipped (will download on first use)"
 }
 
 step_install_package() {
@@ -189,12 +177,6 @@ step_config() {
 #
 # Uncomment to force a language (default: auto-detect):
 # language=en
-#
-# VAD engine for live streaming (fsmn-vad):
-# vad_engine=fsmn-vad
-#
-# Set vad=off to disable live streaming (batch mode):
-# vad=off
 EOF
         if [ -n "$HOTKEY" ]; then
             echo "hotkey=$HOTKEY" >> "$CONFIG_DIR/config"
@@ -225,6 +207,13 @@ summary() {
     else
         echo "    Hotkey: Ctrl+Super+Space (hold to record, release to transcribe)"
         echo "           (or set hotkey=KEY_F12 in $CONFIG_DIR/config)"
+    fi
+    echo ""
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        echo "  Insertion: transcript written to the clipboard, one Ctrl+V paste chord"
+        echo "    (wl-clipboard backend, ydotool chord injector)"
+    else
+        echo "  Insertion: typing through ydotool (no clipboard backend on this session)"
     fi
     echo ""
     echo "  The daemon runs as a systemd user service and auto-starts on login."
@@ -261,15 +250,10 @@ need_root
 step_system_packages
 step_bridge_system_packages
 step_input_group
-if [ -z "${WAYLAND_DISPLAY:-}" ]; then
-    step_ydotool_service
-else
-    info "skipping ydotool service (using wtype on Wayland)"
-fi
+step_ydotool_service
 step_python_packages
 step_install_package
 step_model
-step_vad_model
 step_config
 step_service
 summary

@@ -1,14 +1,13 @@
 import asyncio
 import sys
 
-from evdev import ecodes
+from evdev import InputEvent, ecodes
 
 from .audio import stop_recording
 from .keyboard import Keyboard
 from .output import TextOutput
-from .recording import Recorder
+from .recording import Recorder, Recording
 from .transcribe import Transcriber
-from .vad import VAD
 
 KEYBOARD_SCAN_DELAY_S = 2
 KEYBOARD_RECONNECT_DELAY_S = 1
@@ -23,14 +22,9 @@ class Daemon:
         engine: Transcriber,
         output: TextOutput,
         language: str | None,
-        vad: VAD | None,
     ) -> None:
         self._hotkey_code = hotkey_code
-        self._engine = engine
-        self._output = output
-        self._language = language
-        self._vad = vad
-        self._recorder = Recorder(engine, language, vad, output)
+        self._recorder = Recorder(engine, language, output)
 
     async def run(self) -> None:
         asyncio.get_running_loop().set_exception_handler(
@@ -45,17 +39,13 @@ class Daemon:
                 await asyncio.sleep(KEYBOARD_SCAN_DELAY_S)
                 continue
 
-            queue = asyncio.Queue()
+            queue: asyncio.Queue = asyncio.Queue()
             readers = [
                 asyncio.create_task(self._pump_device(dev, queue)) for dev in devices
             ]
 
-            held = set()
-            proc = None
-            read_task = None
-            buffer = None
-            vad_task = None
-            stop_vad = None
+            held: set[int] = set()
+            recording: Recording | None = None
             try:
                 while True:
                     event = await queue.get()
@@ -68,62 +58,41 @@ class Daemon:
                     if event.type != ecodes.EV_KEY:
                         continue
 
-                    if self._hotkey_code is None:
-                        if event.code not in Keyboard.WANTED_MODS:
-                            continue
-                        if event.value == 1:
-                            held.add(event.code)
-                            if Keyboard.keys_held(held) and proc is None:
-                                proc, read_task, buffer = await Recorder.start()
-                                if self._vad is not None:
-                                    stop_vad, vad_task = self._start_vad_loop(buffer)
-                        elif event.value == 0:
-                            held.discard(event.code)
-                            if proc is not None:
-                                await self._recorder.finish(
-                                    proc,
-                                    read_task,
-                                    buffer,
-                                    vad_task=vad_task,
-                                    stop_vad=stop_vad,
-                                )
-                                proc = read_task = buffer = vad_task = stop_vad = None
-                    else:
-                        if event.code != self._hotkey_code:
-                            continue
-                        if event.value == 1 and proc is None:
-                            proc, read_task, buffer = await Recorder.start()
-                            if self._vad is not None:
-                                stop_vad, vad_task = self._start_vad_loop(buffer)
-                        elif event.value == 0 and proc is not None:
-                            await self._recorder.finish(
-                                proc,
-                                read_task,
-                                buffer,
-                                vad_task=vad_task,
-                                stop_vad=stop_vad,
-                            )
-                            proc = read_task = buffer = vad_task = stop_vad = None
+                    if event.value == 1:
+                        starts: bool = self._press_starts_dictation(event, held)
+                        if starts and recording is None:
+                            recording = await Recorder.start()
+                    elif event.value == 0:
+                        ends: bool = self._release_ends_dictation(event, held)
+                        if ends and recording is not None:
+                            await self._recorder.finish(recording)
+                            recording = None
             finally:
                 for reader in readers:
                     reader.cancel()
                 await asyncio.gather(*readers, return_exceptions=True)
-                if proc is not None:
-                    if stop_vad is not None:
-                        stop_vad.set()
-                    stop_recording(proc)
+                if recording is not None:
+                    stop_recording(recording.process)
                 await asyncio.sleep(KEYBOARD_RECONNECT_DELAY_S)
 
-    def _start_vad_loop(self, buffer: bytearray):
-        stop_vad = asyncio.Event()
-        self._vad.reset()
-        vad_task = asyncio.create_task(
-            self._recorder.live_vad_loop(buffer, stop_vad),
-        )
-        return stop_vad, vad_task
+    def _press_starts_dictation(self, event: InputEvent, held: set[int]) -> bool:
+        if self._hotkey_code is None:
+            if event.code not in Keyboard.WANTED_MODS:
+                return False
+            held.add(event.code)
+            return Keyboard.keys_held(held)
+        return event.code == self._hotkey_code
+
+    def _release_ends_dictation(self, event: InputEvent, held: set[int]) -> bool:
+        if self._hotkey_code is None:
+            if event.code not in Keyboard.WANTED_MODS:
+                return False
+            held.discard(event.code)
+            return True
+        return event.code == self._hotkey_code
 
     @staticmethod
-    async def _pump_device(dev, queue):
+    async def _pump_device(dev, queue: asyncio.Queue) -> None:
         try:
             async for event in dev.async_read_loop():
                 await queue.put(event)
@@ -133,7 +102,7 @@ class Daemon:
             await queue.put(_RESCAN)
 
     @staticmethod
-    def _ignore_evdev_teardown_errors(loop, context):
+    def _ignore_evdev_teardown_errors(loop, context: dict) -> None:
         if isinstance(context.get("exception"), asyncio.InvalidStateError):
             return
         loop.default_exception_handler(context)

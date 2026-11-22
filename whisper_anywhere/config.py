@@ -3,13 +3,13 @@ import os
 import subprocess
 import sys
 
+from whisper_anywhere.insertion import InsertionSelection
 from whisper_anywhere.transcribe import (
     DEFAULT_ENGINE_ID,
     FasterWhisperTranscriber,
     SenseVoiceTranscriber,
     VoskTranscriber,
 )
-from whisper_anywhere.vad import FsmnVAD
 
 
 class Config:
@@ -32,7 +32,10 @@ class Config:
         return path
 
     @staticmethod
-    def check_deps(engine_id: str = DEFAULT_ENGINE_ID) -> None:
+    def check_deps(
+        engine_id: str = DEFAULT_ENGINE_ID,
+        insertion: InsertionSelection | None = None,
+    ) -> None:
         missing = []
         if not subprocess.run(["which", "parec"], capture_output=True).returncode == 0:
             missing.append("parec")
@@ -58,7 +61,7 @@ class Config:
                         file=sys.stderr,
                     )
                     sys.exit(1)
-            case SenseVoiceTranscriber.ENGINE_ID | FsmnVAD.ENGINE_ID:
+            case SenseVoiceTranscriber.ENGINE_ID:
                 try:
                     import funasr  # noqa: F401
                 except ImportError:
@@ -76,6 +79,12 @@ class Config:
                         file=sys.stderr,
                     )
                     sys.exit(1)
+        if insertion is not None:
+            if insertion.inserter is None:
+                print(insertion.description, file=sys.stderr)
+                sys.exit(1)
+            if insertion.warning:
+                print(insertion.warning, file=sys.stderr)
 
     @staticmethod
     def load_config(path: str | None = None) -> dict[str, str]:
@@ -131,14 +140,6 @@ class Config:
             "--stdout",
             action="store_true",
             help="Write transcribed text as JSON lines to stdout instead of ydotool",
-        )
-        p.add_argument(
-            "--vad",
-            nargs="?",
-            default=None,
-            const=FsmnVAD.ENGINE_ID,
-            metavar="ENGINE",
-            help="VAD engine for live streaming (default: fsmn-vad). Use --vad=off to disable.",
         )
         return p.parse_args()
 
