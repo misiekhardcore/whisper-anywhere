@@ -4,6 +4,7 @@ from importlib import resources
 from typing import TYPE_CHECKING, Callable
 
 from .appearance import DAEMON_STOPPED, ICON_DIMMED, Appearance
+from .notifier_host import WATCHER_NAME, NotifierHost
 
 if TYPE_CHECKING:
     from gi.repository import AyatanaAppIndicator3, GLib, Gtk
@@ -14,6 +15,28 @@ QUIT_LABEL = "Quit whisper anywhere"
 def _icon_theme_directory() -> str:
     """The theme root the panel host searches; it resolves the icon, not us."""
     return str(resources.files("whisper_anywhere").joinpath("icons"))
+
+
+def _status_notifier_host_present() -> bool:
+    """Whether the session bus currently owns the StatusNotifier watcher name."""
+    from gi.repository import Gio, GLib
+
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        reply = bus.call_sync(
+            "org.freedesktop.DBus",
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            "NameHasOwner",
+            GLib.Variant("(s)", (WATCHER_NAME,)),
+            GLib.VariantType.new("(b)"),
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
+        )
+        return bool(reply.unpack()[0])
+    except GLib.Error:
+        return False
 
 
 class GtkPresenter:
@@ -38,7 +61,13 @@ class GtkPresenter:
             )
         )
         self._indicator.set_icon_theme_path(_icon_theme_directory())
-        self._indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
+        self._indicator_status = AyatanaAppIndicator3.IndicatorStatus.ACTIVE
+        self._host = NotifierHost(
+            register=self._register_with_host,
+            host_present=_status_notifier_host_present,
+            schedule_retry=GLib.timeout_add,
+        )
+        self._host.start()
 
         self._status_item = Gtk.MenuItem(label=DAEMON_STOPPED.status_text)
         self._status_item.set_sensitive(False)
@@ -63,6 +92,10 @@ class GtkPresenter:
 
     def stop(self) -> None:
         self._gtk.main_quit()
+
+    def _register_with_host(self) -> None:
+        """Announce the indicator so the status-notifier host draws it."""
+        self._indicator.set_status(self._indicator_status)
 
     def _apply(self, appearance: Appearance) -> bool:
         self._indicator.set_icon_full(appearance.icon_name, appearance.status_text)

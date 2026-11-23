@@ -289,7 +289,8 @@ class TestLoadModel:
         mock_auto.assert_called_once_with(model="iic/SenseVoiceSmall", device="cpu")
 
     def test_default_engine_is_sensevoice(self) -> None:
-        t: Transcriber = load_engine()
+        with patch("funasr.AutoModel"):
+            t: Transcriber = load_engine()
         assert isinstance(t, SenseVoiceTranscriber)
 
     def test_invalid_engine_raises(self) -> None:
@@ -367,7 +368,8 @@ class TestTranscriberProtocol:
     def test_faster_whisper_conforms(self) -> None:
         assert isinstance(FasterWhisperTranscriber("tiny.en"), Transcriber)
 
-    def test_sensevoice_conforms(self) -> None:
+    @patch("funasr.AutoModel")
+    def test_sensevoice_conforms(self, mock_auto: MagicMock) -> None:
         assert isinstance(SenseVoiceTranscriber("iic/SenseVoiceSmall"), Transcriber)
 
     def test_vosk_conforms(self) -> None:

@@ -53,6 +53,9 @@ class _FakeEngine:
         self.calls += 1
         return self.transcript
 
+    def __call__(self) -> "_FakeEngine":
+        return self
+
 
 class _FakeOutput:
     def __init__(self) -> None:
@@ -127,8 +130,9 @@ class _Running:
                 _RecordingStarter(self.process),
             )
         )
-        daemon = Daemon(None, self.engine, self.output, None, self.server)
+        daemon = Daemon(None, lambda: self.engine, self.output, None, self.server)
         self.task = asyncio.create_task(daemon.run())
+        await self._wait_until_ready()
         self.client = await self._connect()
         return self
 
@@ -138,6 +142,15 @@ class _Running:
             await asyncio.wait_for(self.task, TIMEOUT)
         finally:
             self._patches.close()
+
+    async def _wait_until_ready(self) -> None:
+        """These tests begin at idle: the bound socket first publishes loading."""
+        for _ in range(500):
+            ready = self.server.status.state is DaemonState.IDLE
+            if os.path.exists(self.path) and ready:
+                return
+            await asyncio.sleep(0.01)
+        raise AssertionError("the daemon never finished loading its engine")
 
     async def _connect(self) -> _Client:
         for _ in range(200):
@@ -149,6 +162,9 @@ class _Running:
                     pass
             await asyncio.sleep(0.01)
         raise AssertionError("the daemon never bound its status socket")
+
+
+Running = _Running
 
 
 def _combo_press_and_release() -> list:
@@ -165,7 +181,7 @@ class TestDictationOverTheSocket:
     async def test_one_dictation_publishes_recording_processing_idle(
         self, tmp_path: Path
     ) -> None:
-        async with _Running(tmp_path / "state.sock", _combo_press_and_release()) as run:
+        async with Running(tmp_path / "state.sock", _combo_press_and_release()) as run:
             assert (await run.client.next_status()).state == DaemonState.IDLE
 
             run.gate.set()
@@ -182,7 +198,7 @@ class TestDictationOverTheSocket:
     async def test_a_blank_transcript_ends_idle_without_a_note(
         self, tmp_path: Path
     ) -> None:
-        async with _Running(tmp_path / "state.sock", _combo_press_and_release()) as run:
+        async with Running(tmp_path / "state.sock", _combo_press_and_release()) as run:
             run.engine.transcript = "   "
             assert (await run.client.next_status()).state == DaemonState.IDLE
 
@@ -202,7 +218,7 @@ class TestQuit:
         self, tmp_path: Path
     ) -> None:
         path = tmp_path / "state.sock"
-        async with _Running(path, _combo_press_and_release()) as run:
+        async with Running(path, _combo_press_and_release()) as run:
             assert (await run.client.next_status()).state == DaemonState.IDLE
 
             await run.client.quit()
@@ -217,7 +233,7 @@ class TestQuit:
             _key(ecodes.KEY_LEFTMETA, 1),
             _key(ecodes.KEY_SPACE, 1),
         ]
-        async with _Running(tmp_path / "state.sock", events) as run:
+        async with Running(tmp_path / "state.sock", events) as run:
             assert (await run.client.next_status()).state == DaemonState.IDLE
 
             run.gate.set()

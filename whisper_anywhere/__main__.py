@@ -2,6 +2,8 @@ import asyncio
 import signal
 import sys
 from argparse import Namespace
+from dataclasses import dataclass
+from typing import Callable
 
 from evdev import ecodes
 
@@ -24,18 +26,26 @@ def load_hotkey(cfg: dict, args: Namespace) -> int | None:
     return hotkey_code
 
 
-def load_engine(
+@dataclass(frozen=True)
+class EngineSetup:
+    """The configured engine, loaded only once the daemon has published loading."""
+
+    engine_id: str
+    load: Callable[[], Transcriber]
+
+
+def plan_engine(
     cfg: dict,
     args: Namespace,
     language: str | None = None,
     insertion: InsertionSelection | None = None,
-) -> Transcriber:
+) -> EngineSetup:
     from .transcribe import DEFAULT_ENGINE_ID, load_engine
 
     engine_id = args.engine or cfg.get("engine", DEFAULT_ENGINE_ID)
     Config.check_deps(engine_id, insertion)
     model_id = args.model or cfg.get("model")
-    return load_engine(engine_id, model_id, language)
+    return EngineSetup(engine_id, lambda: load_engine(engine_id, model_id, language))
 
 
 def main():
@@ -51,15 +61,15 @@ def main():
     hotkey_code = load_hotkey(cfg, args)
     language = args.language or cfg.get("language")
     selection: InsertionSelection | None = None if stdout_mode else select_insertion()
-    engine = load_engine(cfg, args, language, selection)
+    setup = plan_engine(cfg, args, language, selection)
 
     output = TextOutput(stdout_mode, selection.inserter if selection else None)
     insertion: str = "stdout" if stdout_mode else selection.description
-    daemon = Daemon(hotkey_code, engine, output, language)
+    daemon = Daemon(hotkey_code, setup.load, output, language)
 
     lang_str = language or "auto-detect"
     print(
-        f"whisper-anywhere ready — engine: {engine.ENGINE_ID}, hotkey: {f'single-key ({hotkey_code})' if hotkey_code is not None else 'combo (Ctrl+Super+Space)'}, language: {lang_str}, stdout: {stdout_mode}, insertion: {insertion}",
+        f"whisper-anywhere starting — engine: {setup.engine_id}, hotkey: {f'single-key ({hotkey_code})' if hotkey_code is not None else 'combo (Ctrl+Super+Space)'}, language: {lang_str}, stdout: {stdout_mode}, insertion: {insertion}",
         file=sys.stderr,
     )
 
