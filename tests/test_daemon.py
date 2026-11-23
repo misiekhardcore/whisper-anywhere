@@ -8,6 +8,7 @@ from tests.helpers import _FakeDevice, _key_event
 from whisper_anywhere.daemon import Daemon
 from whisper_anywhere.output import TextOutput
 from whisper_anywhere.recording import Recording
+from whisper_anywhere.state import NullStatus
 
 
 class _RecorderCalls:
@@ -42,7 +43,9 @@ def _single_key_press_and_release(code: int) -> list:
 
 def _drive(events: list, hotkey_code: int | None, calls: _RecorderCalls) -> None:
     async def scenario() -> None:
-        daemon: Daemon = Daemon(hotkey_code, None, TextOutput(False), None)
+        daemon: Daemon = Daemon(
+            hotkey_code, None, TextOutput(False), None, NullStatus()
+        )
         task: asyncio.Task = asyncio.create_task(daemon.run())
         await asyncio.sleep(0.1)
         task.cancel()
@@ -120,7 +123,7 @@ class TestKeyboardHotplug:
         calls: _RecorderCalls = _RecorderCalls()
 
         async def scenario() -> None:
-            daemon: Daemon = Daemon(None, None, TextOutput(False), None)
+            daemon: Daemon = Daemon(None, None, TextOutput(False), None, NullStatus())
             task: asyncio.Task = asyncio.create_task(daemon.run())
             await asyncio.sleep(0.1)
             task.cancel()
