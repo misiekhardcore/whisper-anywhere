@@ -7,10 +7,12 @@ from .audio import stop_recording
 from .keyboard import Keyboard
 from .output import TextOutput
 from .recording import Recorder, Recording
+from .state import DaemonState, StatusChannel, StatusServer
 from .transcribe import Transcriber
 
 KEYBOARD_SCAN_DELAY_S = 2
 KEYBOARD_RECONNECT_DELAY_S = 1
+RECORDING_RELEASE_TIMEOUT_S = 2
 
 _RESCAN = object()
 
@@ -22,21 +24,29 @@ class Daemon:
         engine: Transcriber,
         output: TextOutput,
         language: str | None,
+        status: StatusChannel | None = None,
     ) -> None:
         self._hotkey_code = hotkey_code
-        self._recorder = Recorder(engine, language, output)
+        self._status = status or StatusServer()
+        self._recorder = Recorder(engine, language, output, self._status)
 
     async def run(self) -> None:
         asyncio.get_running_loop().set_exception_handler(
             self._ignore_evdev_teardown_errors
         )
+        await self._status.start()
+        try:
+            await self._listen()
+        finally:
+            await self._status.close()
 
-        while True:
+    async def _listen(self) -> None:
+        while not self._status.quit_requested.is_set():
             try:
                 devices = Keyboard.find_keyboards()
             except RuntimeError as exc:
                 print(f"{exc} — retrying in {KEYBOARD_SCAN_DELAY_S}s", file=sys.stderr)
-                await asyncio.sleep(KEYBOARD_SCAN_DELAY_S)
+                await self._wait_or_quit(KEYBOARD_SCAN_DELAY_S)
                 continue
 
             queue: asyncio.Queue = asyncio.Queue()
@@ -47,13 +57,9 @@ class Daemon:
             held: set[int] = set()
             recording: Recording | None = None
             try:
-                while True:
-                    event = await queue.get()
-                    if event is _RESCAN:
-                        print(
-                            "keyboard disconnected; re-scanning devices",
-                            file=sys.stderr,
-                        )
+                while not self._status.quit_requested.is_set():
+                    event = await self._next_event(queue)
+                    if event is None:
                         break
                     if event.type != ecodes.EV_KEY:
                         continue
@@ -61,6 +67,7 @@ class Daemon:
                     if event.value == 1:
                         starts: bool = self._press_starts_dictation(event, held)
                         if starts and recording is None:
+                            self._status.publish(DaemonState.RECORDING)
                             recording = await Recorder.start()
                     elif event.value == 0:
                         ends: bool = self._release_ends_dictation(event, held)
@@ -72,8 +79,43 @@ class Daemon:
                     reader.cancel()
                 await asyncio.gather(*readers, return_exceptions=True)
                 if recording is not None:
-                    stop_recording(recording.process)
-                await asyncio.sleep(KEYBOARD_RECONNECT_DELAY_S)
+                    await self._discard(recording)
+                if not self._status.quit_requested.is_set():
+                    await asyncio.sleep(KEYBOARD_RECONNECT_DELAY_S)
+
+    async def _next_event(self, queue: asyncio.Queue) -> object | None:
+        """Return the next keyboard event, or None once quit is requested."""
+        event_task = asyncio.create_task(queue.get())
+        quit_task = asyncio.create_task(self._status.quit_requested.wait())
+        done, pending = await asyncio.wait(
+            {event_task, quit_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        if quit_task in done:
+            return None
+        return event_task.result()
+
+    async def _wait_or_quit(self, seconds: float) -> None:
+        try:
+            await asyncio.wait_for(self._status.quit_requested.wait(), timeout=seconds)
+        except asyncio.TimeoutError:
+            pass
+
+    @staticmethod
+    async def _discard(recording: Recording) -> None:
+        """Release a capture that will never be transcribed."""
+        stop_recording(recording.process)
+        recording.reader.cancel()
+        await asyncio.gather(recording.reader, return_exceptions=True)
+        wait = getattr(recording.process, "wait", None)
+        if not callable(wait):
+            return
+        try:
+            await asyncio.wait_for(wait(), RECORDING_RELEASE_TIMEOUT_S)
+        except (asyncio.TimeoutError, OSError):
+            pass
 
     def _press_starts_dictation(self, event: InputEvent, held: set[int]) -> bool:
         if self._hotkey_code is None:

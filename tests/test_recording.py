@@ -7,6 +7,7 @@ from tests.helpers import _async_mock
 from whisper_anywhere.audio import AUDIO
 from whisper_anywhere.output import TextOutput
 from whisper_anywhere.recording import Recorder, Recording
+from whisper_anywhere.state import DaemonState
 
 
 class _FakeProcess:
@@ -24,6 +25,23 @@ def _recording(buffer: bytearray) -> Recording:
         reader=asyncio.create_task(asyncio.sleep(0)),
         buffer=buffer,
     )
+
+
+class _FakePublisher:
+    def __init__(self) -> None:
+        self.published: list[DaemonState] = []
+
+    def publish(self, state: DaemonState, note: str | None = None) -> None:
+        self.published.append(state)
+
+
+class _StatusAwareOutput:
+    def __init__(self, publisher: _FakePublisher) -> None:
+        self._publisher = publisher
+        self.published_at_emit: list[DaemonState] | None = None
+
+    async def emit(self, text: str) -> None:
+        self.published_at_emit = list(self._publisher.published)
 
 
 class TestFinishRecording:
@@ -74,6 +92,34 @@ class TestFinishRecording:
 
         engine.transcribe.assert_called_once()
         mock_emit.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_processing_wraps_the_decode_and_ends_before_insertion(
+        self,
+    ) -> None:
+        publisher: _FakePublisher = _FakePublisher()
+        engine: MagicMock = MagicMock()
+        engine.transcribe.return_value = "text"
+        output: _StatusAwareOutput = _StatusAwareOutput(publisher)
+        recorder: Recorder = Recorder(engine, None, output, publisher)
+
+        with patch("whisper_anywhere.recording.write_wav"):
+            await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
+
+        assert publisher.published == [DaemonState.PROCESSING, DaemonState.IDLE]
+        assert output.published_at_emit == publisher.published
+
+    @pytest.mark.asyncio
+    async def test_a_failed_decode_returns_to_idle(self) -> None:
+        publisher: _FakePublisher = _FakePublisher()
+        engine: MagicMock = MagicMock()
+        engine.transcribe.side_effect = RuntimeError("model exploded")
+        recorder: Recorder = Recorder(engine, None, TextOutput(False), publisher)
+
+        with patch("whisper_anywhere.recording.write_wav"):
+            await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
+
+        assert publisher.published == [DaemonState.PROCESSING, DaemonState.IDLE]
 
     @pytest.mark.asyncio
     async def test_engine_failure_is_reported_and_not_raised(

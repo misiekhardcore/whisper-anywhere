@@ -10,9 +10,10 @@ requires-python = ">=3.10"
 
 [project.scripts]
 whisper-anywhere = "whisper_anywhere.__main__:main"
+whisper-anywhere-tray = "whisper_anywhere.tray.__main__:main"
 
 [project.optional-dependencies]
-dev = ["build", "evdev", "pre-commit", "pytest", "pytest-asyncio", "ruff"]
+dev = ["build", "evdev", "pillow", "pre-commit", "pytest", "pytest-asyncio", "ruff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -21,6 +22,9 @@ markers = ["integration: real-model e2e (needs faster-whisper + model download)"
 
 [tool.setuptools.packages.find]
 include = ["whisper_anywhere*"]
+
+[tool.setuptools.package-data]
+whisper_anywhere = ["icons/hicolor/index.theme", "icons/hicolor/*/apps/*.png"]
 
 [tool.ruff]
 target-version = "py310"
