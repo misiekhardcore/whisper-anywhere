@@ -13,9 +13,9 @@ class TypingInserter(TextInserter):
     def __init__(self, tool: TypingTool) -> None:
         self._tool = tool
 
-    def insert_text(self, text: str) -> None:
+    def insert_text(self, text: str) -> bool:
         if not text:
-            return
+            return False
         command: list[str] = (
             ["ydotool", "type", text] if self._tool == "ydotool" else ["wtype", text]
         )
@@ -31,7 +31,7 @@ class TypingInserter(TextInserter):
                 f"{self._tool} not found — install it: sudo apt install {self._tool}",
                 file=sys.stderr,
             )
-            return
+            return False
         if result.returncode != 0:
             if self._tool == "ydotool":
                 print(
@@ -45,3 +45,5 @@ class TypingInserter(TextInserter):
                     f"wtype failed (exit {result.returncode})",
                     file=sys.stderr,
                 )
+            return False
+        return True

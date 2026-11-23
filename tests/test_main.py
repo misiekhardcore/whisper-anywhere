@@ -24,7 +24,8 @@ class _StubEngine:
 
 
 class _FakeInserter(TextInserter):
-    def insert_text(self, text: str) -> None: ...
+    def insert_text(self, text: str) -> bool:
+        return True
 
 
 def _wait_for_socket(socket_path: Path, timeout: float = TIMEOUT) -> None:

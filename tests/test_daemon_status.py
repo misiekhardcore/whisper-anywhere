@@ -13,7 +13,7 @@ from evdev import InputEvent, ecodes
 
 from whisper_anywhere.daemon import Daemon
 from whisper_anywhere.recording import Recording
-from whisper_anywhere.state import DaemonState, DaemonStatus, StatusServer
+from whisper_anywhere.state import FAILURE_NOTE, DaemonState, DaemonStatus, StatusServer
 
 TIMEOUT = 5
 
@@ -48,9 +48,15 @@ class _FakeEngine:
     def __init__(self, transcript: str = "hello world") -> None:
         self.transcript = transcript
         self.calls: int = 0
+        self.transcripts: list[str | Exception] = []
 
     def transcribe(self, path: str, language: str | None = None) -> str:
         self.calls += 1
+        if self.transcripts:
+            outcome = self.transcripts.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
         return self.transcript
 
     def __call__(self) -> "_FakeEngine":
@@ -58,11 +64,13 @@ class _FakeEngine:
 
 
 class _FakeOutput:
-    def __init__(self) -> None:
+    def __init__(self, delivered: bool = True) -> None:
         self.emitted: list[str] = []
+        self.delivered = delivered
 
-    async def emit(self, text: str) -> None:
+    async def emit(self, text: str) -> bool:
         self.emitted.append(text)
+        return self.delivered
 
 
 class _RecordingStarter:
@@ -208,6 +216,65 @@ class TestDictationOverTheSocket:
             assert (await run.client.next_status()).state == DaemonState.PROCESSING
             assert await run.client.next_status() == DaemonStatus(DaemonState.IDLE)
             assert run.output.emitted == []
+
+            await run.client.quit()
+
+    async def test_a_failed_decode_publishes_the_failure_note(
+        self, tmp_path: Path
+    ) -> None:
+        async with Running(tmp_path / "state.sock", _combo_press_and_release()) as run:
+            run.engine.transcripts = [RuntimeError("model exploded")]
+            assert (await run.client.next_status()).state == DaemonState.IDLE
+
+            run.gate.set()
+
+            assert (await run.client.next_status()).state == DaemonState.RECORDING
+            assert (await run.client.next_status()).state == DaemonState.PROCESSING
+            assert await run.client.next_status() == DaemonStatus(
+                DaemonState.IDLE, FAILURE_NOTE
+            )
+            assert run.output.emitted == []
+
+            await run.client.quit()
+
+    async def test_a_failed_insertion_publishes_the_failure_note(
+        self, tmp_path: Path
+    ) -> None:
+        async with Running(tmp_path / "state.sock", _combo_press_and_release()) as run:
+            run.output.delivered = False
+            assert (await run.client.next_status()).state == DaemonState.IDLE
+
+            run.gate.set()
+
+            assert (await run.client.next_status()).state == DaemonState.RECORDING
+            assert (await run.client.next_status()).state == DaemonState.PROCESSING
+            assert await run.client.next_status() == DaemonStatus(DaemonState.IDLE)
+            assert await run.client.next_status() == DaemonStatus(
+                DaemonState.IDLE, FAILURE_NOTE
+            )
+            assert run.output.emitted == ["hello world"]
+
+            await run.client.quit()
+
+    async def test_the_failure_note_clears_when_the_next_dictation_starts(
+        self, tmp_path: Path
+    ) -> None:
+        events = _combo_press_and_release() * 2
+        async with Running(tmp_path / "state.sock", events) as run:
+            run.engine.transcripts = [RuntimeError("model exploded"), "hello world"]
+            assert (await run.client.next_status()).state == DaemonState.IDLE
+
+            run.gate.set()
+
+            assert (await run.client.next_status()).state == DaemonState.RECORDING
+            assert (await run.client.next_status()).state == DaemonState.PROCESSING
+            assert await run.client.next_status() == DaemonStatus(
+                DaemonState.IDLE, FAILURE_NOTE
+            )
+            assert await run.client.next_status() == DaemonStatus(DaemonState.RECORDING)
+            assert (await run.client.next_status()).state == DaemonState.PROCESSING
+            assert await run.client.next_status() == DaemonStatus(DaemonState.IDLE)
+            assert run.output.emitted == ["hello world"]
 
             await run.client.quit()
 

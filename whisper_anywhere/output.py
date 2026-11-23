@@ -19,17 +19,18 @@ class TextOutput:
         self._stdout_mode = stdout_mode
         self._inserter = inserter
 
-    async def emit(self, text: str | None) -> None:
-        """Deliver one finished transcript, off the event loop thread."""
+    async def emit(self, text: str | None) -> bool:
+        """Deliver one finished transcript off the event loop; report delivery."""
         if not text:
-            return
+            return True
         if self._stdout_mode:
             print(json.dumps({"type": "final", "text": text}), flush=True)
-            return
+            return True
         assert self._inserter is not None, "insertion is resolved at startup"
         try:
-            await asyncio.get_running_loop().run_in_executor(
+            return await asyncio.get_running_loop().run_in_executor(
                 None, self._inserter.insert_text, _spaced_for_pasting(text)
             )
         except Exception as exc:
             print(f"Insertion failed: {exc}", file=sys.stderr)
+            return False

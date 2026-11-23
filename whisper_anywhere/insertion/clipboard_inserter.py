@@ -23,12 +23,14 @@ class ClipboardInserter(TextInserter):
         self._chord = chord
         self._pause = pause
 
-    def insert_text(self, text: str) -> None:
+    def insert_text(self, text: str) -> bool:
         if not text:
-            return
+            return False
         previous_text: str | None = self._clipboard.read().text
-        if self._paste(text):
-            self._restore(previous_text, text)
+        if not self._paste(text):
+            return False
+        self._restore(previous_text, text)
+        return True
 
     def _paste(self, text: str) -> bool:
         try:
