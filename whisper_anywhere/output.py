@@ -4,6 +4,15 @@ import sys
 
 from .insertion import TextInserter
 
+_TRAILING_WHITESPACE = (" ", "\t", "\n")
+
+
+def _spaced_for_pasting(text: str) -> str:
+    """Separate this dictation from whatever the next one follows it with."""
+    if text.endswith(_TRAILING_WHITESPACE):
+        return text
+    return f"{text} "
+
 
 class TextOutput:
     def __init__(self, stdout_mode: bool, inserter: TextInserter | None = None) -> None:
@@ -20,7 +29,7 @@ class TextOutput:
         assert self._inserter is not None, "insertion is resolved at startup"
         try:
             await asyncio.get_running_loop().run_in_executor(
-                None, self._inserter.insert_text, text
+                None, self._inserter.insert_text, _spaced_for_pasting(text)
             )
         except Exception as exc:
             print(f"Insertion failed: {exc}", file=sys.stderr)

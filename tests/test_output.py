@@ -58,7 +58,19 @@ class TestEmit:
         inserter: _RecordingInserter = _RecordingInserter()
         await TextOutput(False, inserter).emit("hello")
 
-        assert inserter.inserted == ["hello"]
+        assert inserter.inserted == ["hello "]
+
+    async def test_inserted_transcript_ends_with_a_space(self) -> None:
+        inserter: _RecordingInserter = _RecordingInserter()
+        await TextOutput(False, inserter).emit("hello")
+
+        assert inserter.inserted[0].endswith(" ")
+
+    async def test_existing_trailing_whitespace_is_kept_as_is(self) -> None:
+        inserter: _RecordingInserter = _RecordingInserter()
+        await TextOutput(False, inserter).emit("hello\n")
+
+        assert inserter.inserted == ["hello\n"]
 
     async def test_insertion_runs_off_the_event_loop_thread(self) -> None:
         inserter: _RecordingInserter = _RecordingInserter()
@@ -73,4 +85,4 @@ class TestEmit:
 
         await TextOutput(False, inserter).emit("hello")
 
-        inserter.insert_text.assert_called_once_with("hello")
+        inserter.insert_text.assert_called_once_with("hello ")
