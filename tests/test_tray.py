@@ -217,6 +217,54 @@ class TestTrayFollowsTheDaemon:
             assert tray.presenter.stopped
 
 
+DARK_PANEL = (29, 29, 29, 255)
+LIGHT_PANEL = (240, 240, 240, 255)
+# Overall contrast ratio a pixel needs against the panel to count as drawn.
+VISIBLE_CONTRAST = 3.0
+# Share of a region that must stay drawn: a whole part cannot fade out.
+VISIBLE_SHARE = 0.05
+# The capsule and the stand are checked apart, since the stand once vanished.
+REGIONS = {"capsule": (0.05, 0.02, 0.95, 0.52), "stand": (0.05, 0.62, 0.95, 0.93)}
+
+
+def _relative_luminance(pixel: tuple[int, ...]) -> float:
+    def linear(channel: int) -> float:
+        ratio = channel / 255
+        return ratio / 12.92 if ratio <= 0.04045 else ((ratio + 0.055) / 1.055) ** 2.4
+
+    red, green, blue = (linear(channel) for channel in pixel[:3])
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+
+def _contrast(pixel: tuple[int, ...], background: tuple[int, ...]) -> float:
+    lighter, darker = sorted(
+        (_relative_luminance(pixel), _relative_luminance(background)), reverse=True
+    )
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _visible_pixels(
+    icon, background: tuple[int, ...], region: tuple[float, ...]
+) -> int:
+    """How many pixels of one region stay visible once painted on that panel."""
+    from PIL import Image
+
+    size = icon.width
+    panel = Image.new("RGBA", icon.size, background)
+    painted = Image.alpha_composite(panel, icon.convert("RGBA"))
+    box = (
+        round(region[0] * size),
+        round(region[1] * size),
+        round(region[2] * size),
+        round(region[3] * size),
+    )
+    return sum(
+        1
+        for pixel in painted.crop(box).getdata()
+        if _contrast(pixel, background) >= VISIBLE_CONTRAST
+    )
+
+
 class TestIcons:
     def test_every_appearance_icon_ships_in_panel_and_hidpi_sizes(self) -> None:
         from importlib import resources
@@ -227,6 +275,31 @@ class TestIcons:
             for size in (22, 44):
                 path = theme.joinpath(f"{size}x{size}", "apps", f"{icon}.png")
                 assert path.is_file(), path
+
+    @pytest.mark.parametrize("size", [22, 44])
+    @pytest.mark.parametrize("background", [DARK_PANEL, LIGHT_PANEL])
+    def test_every_icon_stays_visible_on_any_panel_background(
+        self, size: int, background: tuple[int, ...]
+    ) -> None:
+        """The panel may be light or dark, and it draws our pixels unchanged."""
+        from importlib import resources
+
+        from PIL import Image
+
+        theme = resources.files("whisper_anywhere").joinpath(
+            "icons", "hicolor", f"{size}x{size}", "apps"
+        )
+        for icon in (ICON_IDLE, ICON_RECORDING, ICON_PROCESSING, ICON_DIMMED):
+            with theme.joinpath(f"{icon}.png").open("rb") as icon_file:
+                image = Image.open(icon_file)
+                for region, box in REGIONS.items():
+                    area = (box[2] - box[0]) * size * (box[3] - box[1]) * size
+                    required = round(area * VISIBLE_SHARE)
+                    visible = _visible_pixels(image, background, box)
+                    assert visible >= required, (
+                        f"{icon} at {size}px has only {visible} visible {region} "
+                        f"pixels on {background}, needs {required}"
+                    )
 
 
 @pytest.mark.asyncio
