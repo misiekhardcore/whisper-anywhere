@@ -13,30 +13,39 @@ class _RecordingInserter(TextInserter):
         self.inserted: list[str] = []
         self.thread: threading.Thread | None = None
 
-    def insert_text(self, text: str) -> None:
+    def insert_text(self, text: str) -> bool:
         self.inserted.append(text)
         self.thread = threading.current_thread()
+        return True
+
+
+class _FailingInserter(TextInserter):
+    def insert_text(self, text: str) -> bool:
+        return False
 
 
 @pytest.mark.asyncio
 class TestEmit:
     async def test_empty_text_is_noop(self) -> None:
         inserter: _RecordingInserter = _RecordingInserter()
-        await TextOutput(False, inserter).emit("")
+        delivered: bool = await TextOutput(False, inserter).emit("")
 
+        assert delivered is True
         assert inserter.inserted == []
 
     async def test_none_text_is_noop(self) -> None:
         inserter: _RecordingInserter = _RecordingInserter()
-        await TextOutput(False, inserter).emit(None)
+        delivered: bool = await TextOutput(False, inserter).emit(None)
 
+        assert delivered is True
         assert inserter.inserted == []
 
     async def test_stdout_mode_writes_final_json(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        await TextOutput(True, None).emit("hello world")
+        delivered: bool = await TextOutput(True, None).emit("hello world")
 
+        assert delivered is True
         out: str = capsys.readouterr().out
         assert json.loads(out) == {"type": "final", "text": "hello world"}
 
@@ -56,8 +65,9 @@ class TestEmit:
 
     async def test_transcript_inserted_once(self) -> None:
         inserter: _RecordingInserter = _RecordingInserter()
-        await TextOutput(False, inserter).emit("hello")
+        delivered: bool = await TextOutput(False, inserter).emit("hello")
 
+        assert delivered is True
         assert inserter.inserted == ["hello "]
 
     async def test_inserted_transcript_ends_with_a_space(self) -> None:
@@ -83,6 +93,12 @@ class TestEmit:
         inserter: MagicMock = MagicMock()
         inserter.insert_text.side_effect = RuntimeError("boom")
 
-        await TextOutput(False, inserter).emit("hello")
+        delivered: bool = await TextOutput(False, inserter).emit("hello")
 
+        assert delivered is False
         inserter.insert_text.assert_called_once_with("hello ")
+
+    async def test_refused_insertion_reports_not_delivered(self) -> None:
+        delivered: bool = await TextOutput(False, _FailingInserter()).emit("hello")
+
+        assert delivered is False

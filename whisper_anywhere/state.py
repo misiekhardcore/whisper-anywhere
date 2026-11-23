@@ -12,6 +12,9 @@ from .config import Config
 
 STATUS_SOCKET_PATH = os.path.join(Config.runtime_dir(), "state.sock")
 
+# Sticky menu text after a decode or insertion failure; cleared by the next dictation.
+FAILURE_NOTE = "Last dictation failed"
+
 
 class DaemonState(str, Enum):
     LOADING = "loading"

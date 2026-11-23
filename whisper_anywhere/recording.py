@@ -12,7 +12,7 @@ from .audio import (
     write_wav,
 )
 from .output import TextOutput
-from .state import DaemonState, NullStatus, StatePublisher
+from .state import FAILURE_NOTE, DaemonState, NullStatus, StatePublisher
 from .transcribe import Transcriber
 
 
@@ -73,14 +73,15 @@ class Recorder:
             text = await self._transcribe(recording.buffer)
         except Exception as exc:
             print(f"Transcription failed: {exc}", file=sys.stderr)
-            self._status.publish(DaemonState.IDLE)
+            self._status.publish(DaemonState.IDLE, FAILURE_NOTE)
             return
         if not text.strip():
             self._status.publish(DaemonState.IDLE)
             return
         # The transcript exists, so processing is over before anything is inserted.
         self._status.publish(DaemonState.IDLE)
-        await self._output.emit(text)
+        if not await self._output.emit(text):
+            self._status.publish(DaemonState.IDLE, FAILURE_NOTE)
 
     async def _transcribe(self, pcm: bytes | bytearray) -> str:
         write_wav(AUDIO, pcm)

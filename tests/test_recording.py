@@ -7,7 +7,7 @@ from tests.helpers import _async_mock
 from whisper_anywhere.audio import AUDIO
 from whisper_anywhere.output import TextOutput
 from whisper_anywhere.recording import Recorder, Recording
-from whisper_anywhere.state import DaemonState
+from whisper_anywhere.state import FAILURE_NOTE, DaemonState, DaemonStatus
 
 
 class _FakeProcess:
@@ -29,19 +29,21 @@ def _recording(buffer: bytearray) -> Recording:
 
 class _FakePublisher:
     def __init__(self) -> None:
-        self.published: list[DaemonState] = []
+        self.published: list[DaemonStatus] = []
 
     def publish(self, state: DaemonState, note: str | None = None) -> None:
-        self.published.append(state)
+        self.published.append(DaemonStatus(state, note))
 
 
 class _StatusAwareOutput:
-    def __init__(self, publisher: _FakePublisher) -> None:
+    def __init__(self, publisher: _FakePublisher, delivered: bool = True) -> None:
         self._publisher = publisher
-        self.published_at_emit: list[DaemonState] | None = None
+        self._delivered = delivered
+        self.published_at_emit: list[DaemonStatus] | None = None
 
-    async def emit(self, text: str) -> None:
+    async def emit(self, text: str) -> bool:
         self.published_at_emit = list(self._publisher.published)
+        return self._delivered
 
 
 class TestFinishRecording:
@@ -64,8 +66,9 @@ class TestFinishRecording:
 
     @pytest.mark.asyncio
     async def test_empty_recording_emits_nothing(self) -> None:
+        publisher: _FakePublisher = _FakePublisher()
         engine: MagicMock = MagicMock()
-        recorder: Recorder = Recorder(engine, None, TextOutput(False))
+        recorder: Recorder = Recorder(engine, None, TextOutput(False), publisher)
 
         with (
             patch("whisper_anywhere.recording.write_wav") as write_wav,
@@ -76,12 +79,16 @@ class TestFinishRecording:
         write_wav.assert_not_called()
         engine.transcribe.assert_not_called()
         mock_emit.assert_not_called()
+        assert publisher.published == [DaemonStatus(DaemonState.IDLE)]
 
     @pytest.mark.asyncio
-    async def test_whitespace_transcript_emits_nothing(self) -> None:
+    async def test_whitespace_transcript_emits_nothing_and_leaves_no_note(
+        self,
+    ) -> None:
+        publisher: _FakePublisher = _FakePublisher()
         engine: MagicMock = MagicMock()
         engine.transcribe.return_value = "  \n\t"
-        recorder: Recorder = Recorder(engine, None, TextOutput(False))
+        recorder: Recorder = Recorder(engine, None, TextOutput(False), publisher)
 
         with (
             patch("whisper_anywhere.recording.stop_recording"),
@@ -92,6 +99,10 @@ class TestFinishRecording:
 
         engine.transcribe.assert_called_once()
         mock_emit.assert_not_called()
+        assert publisher.published == [
+            DaemonStatus(DaemonState.PROCESSING),
+            DaemonStatus(DaemonState.IDLE),
+        ]
 
     @pytest.mark.asyncio
     async def test_processing_wraps_the_decode_and_ends_before_insertion(
@@ -106,11 +117,16 @@ class TestFinishRecording:
         with patch("whisper_anywhere.recording.write_wav"):
             await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
 
-        assert publisher.published == [DaemonState.PROCESSING, DaemonState.IDLE]
+        assert publisher.published == [
+            DaemonStatus(DaemonState.PROCESSING),
+            DaemonStatus(DaemonState.IDLE),
+        ]
         assert output.published_at_emit == publisher.published
 
     @pytest.mark.asyncio
-    async def test_a_failed_decode_returns_to_idle(self) -> None:
+    async def test_a_failed_decode_returns_to_idle_with_the_failure_note(
+        self,
+    ) -> None:
         publisher: _FakePublisher = _FakePublisher()
         engine: MagicMock = MagicMock()
         engine.transcribe.side_effect = RuntimeError("model exploded")
@@ -119,7 +135,45 @@ class TestFinishRecording:
         with patch("whisper_anywhere.recording.write_wav"):
             await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
 
-        assert publisher.published == [DaemonState.PROCESSING, DaemonState.IDLE]
+        assert publisher.published == [
+            DaemonStatus(DaemonState.PROCESSING),
+            DaemonStatus(DaemonState.IDLE, FAILURE_NOTE),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_failed_insertion_returns_to_idle_with_the_failure_note(
+        self,
+    ) -> None:
+        publisher: _FakePublisher = _FakePublisher()
+        engine: MagicMock = MagicMock()
+        engine.transcribe.return_value = "text"
+        output: _StatusAwareOutput = _StatusAwareOutput(publisher, delivered=False)
+        recorder: Recorder = Recorder(engine, None, output, publisher)
+
+        with patch("whisper_anywhere.recording.write_wav"):
+            await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
+
+        assert publisher.published == [
+            DaemonStatus(DaemonState.PROCESSING),
+            DaemonStatus(DaemonState.IDLE),
+            DaemonStatus(DaemonState.IDLE, FAILURE_NOTE),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_delivered_insertion_leaves_no_note(self) -> None:
+        publisher: _FakePublisher = _FakePublisher()
+        engine: MagicMock = MagicMock()
+        engine.transcribe.return_value = "text"
+        output: _StatusAwareOutput = _StatusAwareOutput(publisher)
+        recorder: Recorder = Recorder(engine, None, output, publisher)
+
+        with patch("whisper_anywhere.recording.write_wav"):
+            await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
+
+        assert publisher.published == [
+            DaemonStatus(DaemonState.PROCESSING),
+            DaemonStatus(DaemonState.IDLE),
+        ]
 
     @pytest.mark.asyncio
     async def test_engine_failure_is_reported_and_not_raised(

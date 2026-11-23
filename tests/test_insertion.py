@@ -93,8 +93,11 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard(events=events)
         chord: _FakeChord = _FakeChord(events=events)
 
-        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("")
+        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
+            ""
+        )
 
+        assert delivered is False
         assert clipboard.events == []
         assert chord.sent == 0
 
@@ -103,8 +106,11 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
         chord: _FakeChord = _FakeChord(events=events)
 
-        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
+            "hello"
+        )
 
+        assert delivered is True
         assert clipboard.writes == ["hello", "copied earlier"]
 
     def test_restore_waits_for_the_settle_delay(self) -> None:
@@ -113,8 +119,9 @@ class TestClipboardInserter:
         chord: _FakeChord = _FakeChord(events=events)
         pause: _FakePause = _FakePause(events)
 
-        ClipboardInserter(clipboard, chord, pause).insert_text("hello")
+        delivered = ClipboardInserter(clipboard, chord, pause).insert_text("hello")
 
+        assert delivered is True
         assert events == [
             "read",
             "write:hello",
@@ -133,8 +140,11 @@ class TestClipboardInserter:
             on_send=lambda: clipboard.replace_externally("something else"),
         )
 
-        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
+            "hello"
+        )
 
+        assert delivered is True
         assert clipboard.writes == ["hello"]
         assert clipboard.text == "something else"
 
@@ -143,8 +153,11 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard(None, events=events)
         chord: _FakeChord = _FakeChord(events=events)
 
-        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
+            "hello"
+        )
 
+        assert delivered is True
         assert clipboard.writes == ["hello"]
         assert clipboard.text == "hello"
 
@@ -157,8 +170,11 @@ class TestClipboardInserter:
         )
         chord: _FakeChord = _FakeChord(events=events)
 
-        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
+            "hello"
+        )
 
+        assert delivered is False
         assert chord.sent == 0
         assert clipboard.text == "copied earlier"
         err: str = capsys.readouterr().err
@@ -172,8 +188,11 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
         chord: _FakeChord = _FakeChord(fail=True, events=events)
 
-        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
+            "hello"
+        )
 
+        assert delivered is False
         assert clipboard.writes == ["hello"]
         assert clipboard.text == "hello"
         err: str = capsys.readouterr().err
@@ -189,8 +208,11 @@ class TestClipboardInserter:
         )
         chord: _FakeChord = _FakeChord(events=events)
 
-        ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text("hello")
+        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
+            "hello"
+        )
 
+        assert delivered is True
         assert chord.sent == 1
         assert "Clipboard restore failed" in capsys.readouterr().err
 
@@ -324,8 +346,9 @@ class TestTypingInserter:
     def test_ydotool_types_the_transcript(self) -> None:
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
-            TypingInserter("ydotool").insert_text("hello")
+            delivered = TypingInserter("ydotool").insert_text("hello")
 
+        assert delivered is True
         call = run.call_args
         assert call.args[0] == ["ydotool", "type", "hello"]
         assert call.kwargs["stdout"] is subprocess.DEVNULL
@@ -334,29 +357,33 @@ class TestTypingInserter:
     def test_wtype_types_the_transcript(self) -> None:
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=0)
-            TypingInserter("wtype").insert_text("zażółć")
+            delivered = TypingInserter("wtype").insert_text("zażółć")
 
+        assert delivered is True
         assert run.call_args.args[0] == ["wtype", "zażółć"]
 
     def test_empty_text_types_nothing(self) -> None:
         with patch("subprocess.run") as run:
-            TypingInserter("ydotool").insert_text("")
+            delivered = TypingInserter("ydotool").insert_text("")
 
+        assert delivered is False
         run.assert_not_called()
 
     def test_ydotool_failure_reports(self, capsys: pytest.CaptureFixture[str]) -> None:
         with patch("subprocess.run") as run:
             run.return_value = MagicMock(returncode=1)
-            TypingInserter("ydotool").insert_text("hello")
+            delivered = TypingInserter("ydotool").insert_text("hello")
 
+        assert delivered is False
         assert "ydotool type failed" in capsys.readouterr().err
 
     def test_missing_tool_reports_package(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         with patch("subprocess.run", side_effect=FileNotFoundError):
-            TypingInserter("wtype").insert_text("hello")
+            delivered = TypingInserter("wtype").insert_text("hello")
 
+        assert delivered is False
         err: str = capsys.readouterr().err
         assert "wtype not found" in err
         assert "sudo apt install wtype" in err
