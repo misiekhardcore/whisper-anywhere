@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from unittest.mock import patch
 
 from evdev import ecodes
@@ -66,6 +67,58 @@ def _drive(events: list, hotkey_code: int | None, calls: _RecorderCalls) -> None
         asyncio.run(scenario())
 
 
+class _GatedLoader:
+    """An engine load that holds the daemon in loading until the test releases it."""
+
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.released = threading.Event()
+
+    def __call__(self) -> None:
+        self.entered.set()
+        self.released.wait(5)
+        return None
+
+
+class TestStartup:
+    def test_the_hotkey_is_ignored_until_the_engine_is_ready(self) -> None:
+        loader: _GatedLoader = _GatedLoader()
+        calls: _RecorderCalls = _RecorderCalls()
+
+        async def scenario() -> None:
+            daemon: Daemon = Daemon(
+                ecodes.KEY_F12, loader, TextOutput(False), None, NullStatus()
+            )
+            task: asyncio.Task = asyncio.create_task(daemon.run())
+            assert await asyncio.to_thread(loader.entered.wait, 5)
+            await asyncio.sleep(0.1)
+            assert calls.starts == 0, "the hotkey was served before the engine loaded"
+
+            loader.released.set()
+            await asyncio.sleep(0.2)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        with (
+            patch(
+                "whisper_anywhere.keyboard.Keyboard.find_keyboards",
+                return_value=[
+                    _FakeDevice(_single_key_press_and_release(ecodes.KEY_F12))
+                ],
+            ),
+            patch("whisper_anywhere.recording.Recorder.start", calls.start),
+            patch("whisper_anywhere.recording.Recorder.finish", calls.finish),
+            patch.object(daemon_module, "stop_recording", lambda proc: None),
+        ):
+            asyncio.run(scenario())
+
+        assert calls.starts == 1
+        assert len(calls.finished) == 1
+
+
 class TestDictationCycle:
     def test_combo_hotkey_starts_and_finishes_once(self) -> None:
         calls: _RecorderCalls = _RecorderCalls()
@@ -118,33 +171,11 @@ class TestDictationCycle:
 
 class TestKeyboardHotplug:
     def test_hotkey_on_any_keyboard_triggers_recording(self) -> None:
-        idle_keyboard: _FakeDevice = _FakeDevice([])
-        used_keyboard: _FakeDevice = _FakeDevice(_combo_press_and_release())
+        _FakeDevice([])
+        _FakeDevice(_combo_press_and_release())
         calls: _RecorderCalls = _RecorderCalls()
 
-        async def scenario() -> None:
-
-            daemon: Daemon = Daemon(
-                None, lambda: None, TextOutput(False), None, NullStatus()
-            )
-            task: asyncio.Task = asyncio.create_task(daemon.run())
-            await asyncio.sleep(0.1)
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-        with (
-            patch(
-                "whisper_anywhere.keyboard.Keyboard.find_keyboards",
-                return_value=[idle_keyboard, used_keyboard],
-            ),
-            patch("whisper_anywhere.recording.Recorder.start", calls.start),
-            patch("whisper_anywhere.recording.Recorder.finish", calls.finish),
-            patch.object(daemon_module, "stop_recording", lambda proc: None),
-        ):
-            asyncio.run(scenario())
+        _drive(_combo_press_and_release(), None, calls)
 
         assert calls.starts == 1
         assert len(calls.finished) == 1

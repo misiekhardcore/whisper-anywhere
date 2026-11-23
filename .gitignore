@@ -5,3 +5,5 @@ dist/
 .pytest_cache/
 .venv/
 uv.lock
+tests/__pycache__/
+tests/**/__pycache__/

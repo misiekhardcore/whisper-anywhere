@@ -132,6 +132,7 @@ class _Running:
         )
         daemon = Daemon(None, lambda: self.engine, self.output, None, self.server)
         self.task = asyncio.create_task(daemon.run())
+        await self._wait_until_ready()
         self.client = await self._connect()
         return self
 
@@ -141,6 +142,15 @@ class _Running:
             await asyncio.wait_for(self.task, TIMEOUT)
         finally:
             self._patches.close()
+
+    async def _wait_until_ready(self) -> None:
+        """These tests begin at idle: the bound socket first publishes loading."""
+        for _ in range(500):
+            ready = self.server.status.state is DaemonState.IDLE
+            if os.path.exists(self.path) and ready:
+                return
+            await asyncio.sleep(0.01)
+        raise AssertionError("the daemon never finished loading its engine")
 
     async def _connect(self) -> _Client:
         for _ in range(200):
