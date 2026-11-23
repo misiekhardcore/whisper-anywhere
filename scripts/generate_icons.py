@@ -7,9 +7,28 @@ from PIL import Image, ImageDraw
 ICONS_DIRECTORY: Path = (
     Path(__file__).resolve().parents[1] / "whisper_anywhere" / "icons"
 )
+THEME_DIRECTORY: Path = ICONS_DIRECTORY / "hicolor"
 PANEL_SIZE = 22
 HIDPI_SIZE = 44
 SUPERSAMPLE = 4
+
+INDEX_THEME = """[Icon Theme]
+Name=Whisper Anywhere
+Comment=Dictation state icons
+Directories=22x22/apps,44x44/apps
+
+[22x22/apps]
+Size=22
+Scale=1
+Type=Fixed
+Context=Applications
+
+[44x44/apps]
+Size=22
+Scale=2
+Type=Fixed
+Context=Applications
+"""
 
 NEUTRAL = (230, 230, 230, 255)
 RED = (229, 72, 77, 255)
@@ -58,10 +77,18 @@ def _draw_microphone(size: int, fill: tuple[int, int, int, int]) -> Image.Image:
 
 
 def main() -> None:
-    ICONS_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    """Write a hicolor theme, which is what a tray host can resolve by name."""
+    (THEME_DIRECTORY / "22x22" / "apps").mkdir(parents=True, exist_ok=True)
+    (THEME_DIRECTORY / "44x44" / "apps").mkdir(parents=True, exist_ok=True)
+    (THEME_DIRECTORY / "index.theme").write_text(INDEX_THEME)
     for name, fill in COLORS.items():
-        for size, suffix in ((PANEL_SIZE, ""), (HIDPI_SIZE, "@2x")):
-            path = ICONS_DIRECTORY / f"whisper-anywhere-{name}{suffix}.png"
+        for size in (PANEL_SIZE, HIDPI_SIZE):
+            path = (
+                THEME_DIRECTORY
+                / f"{size}x{size}"
+                / "apps"
+                / f"whisper-anywhere-{name}.png"
+            )
             _draw_microphone(size, fill).save(path)
             print(f"wrote {path.relative_to(ICONS_DIRECTORY.parents[1])}")
 

@@ -152,6 +152,25 @@ class _Sequencer:
             return False
 
 
+def test_the_indicator_exports_an_icon_theme_the_host_can_resolve() -> None:
+    """The host resolves the icon name itself, so the theme path must carry it."""
+    from gi.repository import Gtk
+
+    from whisper_anywhere.tray.gtk import GtkPresenter
+
+    presenter = GtkPresenter()
+    theme_path = presenter._indicator.get_icon_theme_path()
+    assert theme_path, "the indicator exports no icon theme path"
+
+    theme = Gtk.IconTheme.new()
+    theme.set_search_path([theme_path])
+    for icon in (ICON_IDLE, ICON_RECORDING, ICON_PROCESSING, ICON_DIMMED):
+        for scale, directory in ((1, "22x22"), (2, "44x44")):
+            info = theme.lookup_icon_for_scale(icon, 22, scale, 0)
+            assert info is not None, f"{icon} does not resolve at scale {scale}"
+            assert Path(info.get_filename()).parent.parent.name == directory
+
+
 def test_real_gtk_tray_follows_states_and_quits(tmp_path: Path) -> None:
     from gi.repository import GLib
 

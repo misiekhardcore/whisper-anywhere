@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 QUIT_LABEL = "Quit whisper anywhere"
 
 
-def _icons_directory() -> str:
+def _icon_theme_directory() -> str:
+    """The theme root the panel host searches; it resolves the icon, not us."""
     return str(resources.files("whisper_anywhere").joinpath("icons"))
 
 
@@ -29,7 +30,6 @@ class GtkPresenter:
         self._gtk: "Gtk" = Gtk
         self._quit_handler: Callable[[], None] | None = None
 
-        Gtk.IconTheme.get_default().append_search_path(_icons_directory())
         self._indicator: "AyatanaAppIndicator3.Indicator" = (
             AyatanaAppIndicator3.Indicator.new(
                 "whisper-anywhere",
@@ -37,6 +37,7 @@ class GtkPresenter:
                 AyatanaAppIndicator3.IndicatorCategory.APPLICATION_STATUS,
             )
         )
+        self._indicator.set_icon_theme_path(_icon_theme_directory())
         self._indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
 
         self._status_item = Gtk.MenuItem(label=DAEMON_STOPPED.status_text)

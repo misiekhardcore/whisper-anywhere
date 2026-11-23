@@ -1,0 +1,16 @@
+[Icon Theme]
+Name=Whisper Anywhere
+Comment=Dictation state icons
+Directories=22x22/apps,44x44/apps
+
+[22x22/apps]
+Size=22
+Scale=1
+Type=Fixed
+Context=Applications
+
+[44x44/apps]
+Size=22
+Scale=2
+Type=Fixed
+Context=Applications

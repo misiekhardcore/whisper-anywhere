@@ -221,10 +221,12 @@ class TestIcons:
     def test_every_appearance_icon_ships_in_panel_and_hidpi_sizes(self) -> None:
         from importlib import resources
 
-        icons = resources.files("whisper_anywhere").joinpath("icons")
+        theme = resources.files("whisper_anywhere").joinpath("icons", "hicolor")
+        assert theme.joinpath("index.theme").is_file()
         for icon in (ICON_IDLE, ICON_RECORDING, ICON_PROCESSING, ICON_DIMMED):
-            for suffix in ("", "@2x"):
-                assert icons.joinpath(f"{icon}{suffix}.png").is_file(), icon
+            for size in (22, 44):
+                path = theme.joinpath(f"{size}x{size}", "apps", f"{icon}.png")
+                assert path.is_file(), path
 
 
 @pytest.mark.asyncio
