@@ -44,7 +44,7 @@ def _single_key_press_and_release(code: int) -> list:
 def _drive(events: list, hotkey_code: int | None, calls: _RecorderCalls) -> None:
     async def scenario() -> None:
         daemon: Daemon = Daemon(
-            hotkey_code, None, TextOutput(False), None, NullStatus()
+            hotkey_code, lambda: None, TextOutput(False), None, NullStatus()
         )
         task: asyncio.Task = asyncio.create_task(daemon.run())
         await asyncio.sleep(0.1)
@@ -123,7 +123,10 @@ class TestKeyboardHotplug:
         calls: _RecorderCalls = _RecorderCalls()
 
         async def scenario() -> None:
-            daemon: Daemon = Daemon(None, None, TextOutput(False), None, NullStatus())
+
+            daemon: Daemon = Daemon(
+                None, lambda: None, TextOutput(False), None, NullStatus()
+            )
             task: asyncio.Task = asyncio.create_task(daemon.run())
             await asyncio.sleep(0.1)
             task.cancel()

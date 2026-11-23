@@ -40,7 +40,7 @@ class Daemon:
         await self._status.start()
         self._status.publish(DaemonState.LOADING)
         try:
-            engine = await self._load()
+            engine: Transcriber = await self._load()
             self._status.publish(DaemonState.IDLE)
             recorder = Recorder(engine, self._language, self._output, self._status)
             await self._listen(recorder)
@@ -48,7 +48,7 @@ class Daemon:
             await self._status.close()
 
     async def _load(self) -> Transcriber:
-        """Load the engine off the loop, so the socket keeps answering meanwhile."""
+        """Load the engine off the event loop, so the status socket keeps answering meanwhile."""
         return await asyncio.get_running_loop().run_in_executor(None, self._load_engine)
 
     async def _listen(self, recorder: Recorder) -> None:

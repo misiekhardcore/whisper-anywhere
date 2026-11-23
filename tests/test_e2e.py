@@ -87,7 +87,7 @@ async def drive_dictation(
 
     output.emit = capturing_emit  # type: ignore[method-assign]
 
-    daemon_instance: Daemon = Daemon(ecodes.KEY_F12, model, output, None)
+    daemon_instance: Daemon = Daemon(ecodes.KEY_F12, lambda: model, output, None)
     task: asyncio.Task = asyncio.create_task(daemon_instance.run())
     try:
         return await asyncio.wait_for(done, timeout)
