@@ -45,10 +45,19 @@ step_system_packages() {
     echo ""
     echo "==> Installing system packages..."
     pkg_install \
-            pulseaudio-utils \
-            python3-evdev \
-            python3-pip \
-            ydotool
+				pulseaudio-utils \
+				python3-evdev \
+				python3-pip \
+				ydotool \
+				pkg-config \
+				ffmpeg \
+				libavformat-dev \
+				libavcodec-dev \
+				libavdevice-dev \
+				libavutil-dev \
+				libavfilter-dev \
+				libswscale-dev \
+				libswresample-dev
     if [ -n "${WAYLAND_DISPLAY:-}" ]; then
         info "Wayland detected — also installing the clipboard backend (wl-clipboard)"
         pkg_install wl-clipboard
