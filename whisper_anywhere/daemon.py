@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from typing import Callable
 
 from evdev import InputEvent, ecodes
 
@@ -21,26 +22,36 @@ class Daemon:
     def __init__(
         self,
         hotkey_code: int | None,
-        engine: Transcriber,
+        load_engine: Callable[[], Transcriber],
         output: TextOutput,
         language: str | None,
         status: StatusChannel | None = None,
     ) -> None:
         self._hotkey_code = hotkey_code
+        self._load_engine = load_engine
+        self._output = output
+        self._language = language
         self._status = status or StatusServer()
-        self._recorder = Recorder(engine, language, output, self._status)
 
     async def run(self) -> None:
         asyncio.get_running_loop().set_exception_handler(
             self._ignore_evdev_teardown_errors
         )
         await self._status.start()
+        self._status.publish(DaemonState.LOADING)
         try:
-            await self._listen()
+            engine = await self._load()
+            self._status.publish(DaemonState.IDLE)
+            recorder = Recorder(engine, self._language, self._output, self._status)
+            await self._listen(recorder)
         finally:
             await self._status.close()
 
-    async def _listen(self) -> None:
+    async def _load(self) -> Transcriber:
+        """Load the engine off the loop, so the socket keeps answering meanwhile."""
+        return await asyncio.get_running_loop().run_in_executor(None, self._load_engine)
+
+    async def _listen(self, recorder: Recorder) -> None:
         while not self._status.quit_requested.is_set():
             try:
                 devices = Keyboard.find_keyboards()
@@ -72,7 +83,7 @@ class Daemon:
                     elif event.value == 0:
                         ends: bool = self._release_ends_dictation(event, held)
                         if ends and recording is not None:
-                            await self._recorder.finish(recording)
+                            await recorder.finish(recording)
                             recording = None
             finally:
                 for reader in readers:
