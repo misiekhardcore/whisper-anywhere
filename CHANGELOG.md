@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The tray menu has a "Start at login" item that reads the two user units whenever the menu opens and enables or disables them
+
 ### Changed
 
 - A dictation is transcribed once, over the whole hotkey hold, and inserted once; the streaming mode that retyped text while you were still speaking is gone
@@ -15,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Insertion writes the transcript to the clipboard and sends one paste chord (Ctrl+V through `ydotool`, or `wtype` when `ydotool` is absent) instead of typing every character; typing remains the fallback when no clipboard tool is available
 - The transcript is left on the clipboard after a successful paste
 - The dependency check and installer name the clipboard backend and chord injector
+- `install.sh` installs the Python stack of the configured engine only, and pre-loads the SenseVoice model only for the SenseVoice engine; `ENGINE` picks the engine for a fresh install
 
 ### Removed
 
@@ -24,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `install.sh` performs the editable install from the primary worktree, so the console scripts cannot end up importing a worktree that is later removed
+- `install.sh` checks that the package it installed imports from outside the source tree, and fails instead of reporting success when it does not
+- `install.sh` asks `dpkg` first, so it skips apt and the privilege prompt when every system package is already present
+- The installer summary reports the hotkey from the config instead of always claiming the default combo
 - `--stdout` is honoured when passed as a flag again; the mode check used to treat the boolean flag as one of the `1`/`true`/`yes` config strings
 
 ## [1.1.3] - 2026-10-13

@@ -6,10 +6,11 @@ skips without a display or the AppIndicator typelib, as CI has neither.
 
 import asyncio
 import os
+import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
 import pytest
 
@@ -20,6 +21,7 @@ from whisper_anywhere.tray.appearance import (
     ICON_PROCESSING,
     ICON_RECORDING,
 )
+from whisper_anywhere.tray.autostart import DAEMON_UNIT, TRAY_UNIT, LoginAutostart
 from whisper_anywhere.tray.controller import TrayController
 
 
@@ -113,6 +115,31 @@ class _Menu:
             f"no quit item in {[i.get_label() for i in self._items()]}"
         )
 
+    def autostart_item(self):
+        for item in self._items():
+            if item.get_label() == "Start at login":
+                return item
+        raise AssertionError(
+            f"no autostart item in {[i.get_label() for i in self._items()]}"
+        )
+
+    def open(self) -> None:
+        """Opening the menu: the panel asks the exported dbusmenu AboutToShow."""
+        server = self._indicator.get_property("dbus-menu-server")
+        server.get_property("root-node").emit("about-to-show")
+
+
+class _FakeSystemctl:
+    """Answers `is-enabled` and records every systemctl argv."""
+
+    def __init__(self, states: str) -> None:
+        self.states = states
+        self.calls: list[list[str]] = []
+
+    def run(self, argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
+        self.calls.append(list(argv))
+        return subprocess.CompletedProcess(list(argv), 0, self.states, "")
+
 
 class _Sequencer:
     """Advances a list of (action, probe) steps from a GLib timeout."""
@@ -150,6 +177,61 @@ class _Sequencer:
             self.failure = exc
             self._abort()
             return False
+
+
+def test_the_menu_reads_the_autostart_state_each_time_it_opens() -> None:
+    from whisper_anywhere.tray.gtk import GtkPresenter
+
+    systemctl = _FakeSystemctl("enabled\nenabled\n")
+    presenter = GtkPresenter(autostart=LoginAutostart(systemctl))
+    menu = _Menu(presenter)
+    item = menu.autostart_item()
+
+    assert item.get_active() is True
+    assert item.get_visible() is True
+
+    systemctl.states = "disabled\ndisabled\n"
+    menu.open()
+
+    assert item.get_active() is False
+    assert systemctl.calls == [
+        ["systemctl", "--user", "is-enabled", DAEMON_UNIT, TRAY_UNIT],
+        ["systemctl", "--user", "is-enabled", DAEMON_UNIT, TRAY_UNIT],
+    ]
+
+
+def test_the_autostart_item_hides_when_the_state_is_unreadable() -> None:
+    from whisper_anywhere.tray.gtk import GtkPresenter
+
+    systemctl = _FakeSystemctl("")
+    presenter = GtkPresenter(autostart=LoginAutostart(systemctl))
+    menu = _Menu(presenter)
+
+    assert menu.autostart_item().get_visible() is False
+    assert menu.quit_item().get_sensitive() is True
+
+    systemctl.states = "disabled\ndisabled\n"
+    menu.open()
+
+    assert menu.autostart_item().get_visible() is True
+    assert menu.autostart_item().get_active() is False
+
+
+def test_toggling_autostart_changes_only_what_starts_at_login() -> None:
+    from whisper_anywhere.tray.gtk import GtkPresenter
+
+    systemctl = _FakeSystemctl("disabled\ndisabled\n")
+    presenter = GtkPresenter(autostart=LoginAutostart(systemctl))
+    item = _Menu(presenter).autostart_item()
+    systemctl.calls.clear()
+
+    item.set_active(True)
+    item.set_active(False)
+
+    assert systemctl.calls == [
+        ["systemctl", "--user", "enable", DAEMON_UNIT, TRAY_UNIT],
+        ["systemctl", "--user", "disable", DAEMON_UNIT, TRAY_UNIT],
+    ]
 
 
 def test_the_indicator_exports_an_icon_theme_the_host_can_resolve() -> None:

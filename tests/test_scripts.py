@@ -35,13 +35,45 @@ def fake_home(tmp_path: Path) -> Generator[Path, None, None]:
     # Package manager — record the requested packages, install nothing
     stub("apt-get", 'echo "$*" >> "$APT_LOG"')
 
+    # dpkg-query — reports nothing installed unless a test says otherwise, so
+    # the package step is exercised instead of being skipped.
+    stub(
+        "dpkg-query",
+        textwrap.dedent("""\
+        if [[ "${DPKG_INSTALLED_ALL:-0}" == "1" ]]; then
+            echo "install ok installed"
+            exit 0
+        fi
+        exit 1
+    """),
+    )
+
     # systemctl — always succeed; record the calls, never touch the real daemon
     stub("systemctl", 'echo "$*" >> "$SYSTEMCTL_LOG"')
 
-    # sudo — no-op for package/user management, pass through everything else
+    # git — report this checkout as the only worktree, unless a test names more
+    stub(
+        "git",
+        textwrap.dedent("""\
+        if [[ "${1:-}" == "-C" ]]; then shift 2; fi
+        if [[ "${1:-}" == "worktree" && "${2:-}" == "list" ]]; then
+            printf 'worktree %s\\nHEAD deadbee\\nbranch refs/heads/main\\n\\n' \\
+                "${WHISPER_PRIMARY:-$WHISPER_REPO_DIR}"
+            if [[ -n "${WHISPER_LINKED:-}" ]]; then
+                printf 'worktree %s\\nHEAD badc0de\\nbranch refs/heads/side\\n\\n' \\
+                    "$WHISPER_LINKED"
+            fi
+            exit 0
+        fi
+        exit 1
+    """),
+    )
+
+    # sudo — record the call, no-op for package/user management, pass the rest
     stub(
         "sudo",
         textwrap.dedent("""\
+        echo "$*" >> "$SUDO_LOG"
         case "${1:-}" in
             usermod|gpasswd) exit 0 ;;
             *) exec "$@" ;;
@@ -64,6 +96,15 @@ def fake_home(tmp_path: Path) -> Generator[Path, None, None]:
             exit 0
         fi
         if [[ "${{1:-}}" == "-c" ]] && echo "${{2:-}}" | grep -q "WhisperModel"; then
+            exit 0
+        fi
+        if [[ "${{1:-}}" == "-c" ]] && echo "${{2:-}}" | grep -q "AutoModel"; then
+            echo "$*" >> "$MODEL_LOG"
+            exit 0
+        fi
+        if [[ "${{1:-}}" == "-c" ]] && echo "${{2:-}}" | grep -q "whisper_anywhere.__file__"; then
+            if [[ -n "${{INSTALL_PROBE_EXIT:-}}" ]]; then exit "$INSTALL_PROBE_EXIT"; fi
+            echo "${{INSTALL_PROBE_PATH:-$WHISPER_REPO_DIR}}"
             exit 0
         fi
         exec {REAL_PYTHON} "$@"
@@ -90,6 +131,12 @@ def _environment(
         "PIP_LOG": str(home / "pip.log"),
         "APT_LOG": str(home / "apt.log"),
         "SYSTEMCTL_LOG": str(home / "systemctl.log"),
+        "SUDO_LOG": str(home / "sudo.log"),
+        "MODEL_LOG": str(home / "model.log"),
+        # The git stub reports one worktree unless a test names a linked one.
+        "WHISPER_REPO_DIR": str(REPO_DIR),
+        "WHISPER_PRIMARY": "",
+        "WHISPER_LINKED": "",
         "REJECT_USER_PIP": "1" if reject_user_pip else "0",
         "AUTOSTART": "",
         **(extra_env or {}),
@@ -227,6 +274,11 @@ class TestInstallUninstall:
                     echo "$*" >> "$PIP_LOG"
                     exit 0
                 fi
+                if [[ "${1:-}" == "-c" ]] &&
+                    echo "${2:-}" | grep -q "whisper_anywhere.__file__"; then
+                    echo "$WHISPER_REPO_DIR"
+                    exit 0
+                fi
                 exit 0
             """
             )
@@ -285,9 +337,7 @@ class TestInstallUninstall:
         assert result.returncode == 0, f"install.sh failed:\n{result.stderr}"
 
         pip_calls: str = (fake_home / "pip.log").read_text()
-        assert (
-            "install --user --break-system-packages faster-whisper av<19" in pip_calls
-        )
+        assert "install --user --break-system-packages funasr" in pip_calls
 
     def test_install_adds_wl_clipboard_on_wayland(self, fake_home: Path) -> None:
         result: subprocess.CompletedProcess = _run(
@@ -307,7 +357,7 @@ class TestInstallUninstall:
 
         calls: str = (fake_home / "systemctl.log").read_text()
         assert "enable whisper-anywhere.service whisper-anywhere-tray.service" in calls
-        assert "start whisper-anywhere.service whisper-anywhere-tray.service" in calls
+        assert "restart whisper-anywhere.service whisper-anywhere-tray.service" in calls
 
     def test_install_honours_autostart_0_without_a_tty(self, fake_home: Path) -> None:
         result: subprocess.CompletedProcess = _run(
@@ -402,6 +452,7 @@ class TestInstallUninstall:
         packages: str = (fake_home / "apt.log").read_text()
         assert "python3-gi" in packages
         assert "gir1.2-ayatanaappindicator3-0.1" in packages
+        assert "gir1.2-dbusmenu-glib-0.4" in packages
 
     def test_install_enables_ydotool_on_wayland(self, fake_home: Path) -> None:
         result: subprocess.CompletedProcess = _run(
@@ -423,6 +474,17 @@ class TestInstallUninstall:
         _run(REPO_DIR / "install.sh", fake_home)
 
         assert not desktop.exists(), "legacy .desktop entry should be removed"
+
+    def test_install_reports_the_hotkey_from_an_existing_config(
+        self, fake_home: Path
+    ) -> None:
+        _write_config(fake_home, "hotkey=KEY_F12\nengine=faster-whisper\n")
+
+        result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
+        assert result.returncode == 0, f"install.sh failed:\n{result.stdout}"
+
+        assert "Hotkey: KEY_F12" in result.stdout
+        assert "Hotkey: Ctrl+Super+Space" not in result.stdout
 
     def test_install_does_not_overwrite_existing_config(self, fake_home: Path) -> None:
         config_dir: Path = fake_home / ".config" / "whisper-anywhere"
@@ -506,3 +568,141 @@ class TestInstallUninstall:
         assert result.returncode == 0, f"uninstall.sh failed:\n{result.stderr}"
 
         assert config_dir.exists(), "config dir should be kept when user answers n"
+
+
+def _write_config(home: Path, body: str) -> None:
+    """Give the installer a pre-existing config, the way a second run finds one."""
+    config_dir: Path = home / ".config" / "whisper-anywhere"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config").write_text(body)
+
+
+class TestInstallRobustness:
+    """The four ways an install can look fine and still leave the machine broken."""
+
+    def test_install_targets_the_primary_worktree(self, fake_home: Path) -> None:
+        """An editable install must not point into a worktree that can be removed."""
+        primary: Path = fake_home / "primary"
+        linked: Path = fake_home / "linked"
+        primary.mkdir()
+        linked.mkdir()
+
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh",
+            fake_home,
+            extra_env={
+                "WHISPER_PRIMARY": str(primary),
+                "WHISPER_LINKED": str(linked),
+                "INSTALL_PROBE_PATH": str(primary),
+            },
+        )
+        assert result.returncode == 0, f"install.sh failed:\n{result.stdout}"
+
+        pip_calls: str = (fake_home / "pip.log").read_text()
+        assert f"-e {primary}" in pip_calls
+        assert f"-e {linked}" not in pip_calls
+        assert "primary worktree" in result.stdout
+
+    def test_install_falls_back_when_git_cannot_list_worktrees(
+        self, fake_home: Path
+    ) -> None:
+        git: Path = fake_home / "bin" / "git"
+        git.write_text("#!/usr/bin/env bash\nexit 1\n")
+        git.chmod(0o755)
+
+        result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
+        assert result.returncode == 0, f"install.sh failed:\n{result.stdout}"
+
+        assert f"-e {REPO_DIR}" in (fake_home / "pip.log").read_text()
+
+    def test_install_fails_when_the_installed_package_resolves_elsewhere(
+        self, fake_home: Path
+    ) -> None:
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh",
+            fake_home,
+            extra_env={"INSTALL_PROBE_PATH": "/gone/worktree"},
+        )
+
+        assert result.returncode != 0, "install.sh must fail on a misdirected install"
+        assert "/gone/worktree" in result.stdout
+        assert str(REPO_DIR) in result.stdout
+
+    def test_install_fails_when_the_installed_package_cannot_be_imported(
+        self, fake_home: Path
+    ) -> None:
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh",
+            fake_home,
+            extra_env={"INSTALL_PROBE_EXIT": "1"},
+        )
+
+        assert result.returncode != 0, "install.sh must fail when nothing imports"
+        assert "not importable" in result.stdout
+
+    def test_install_skips_apt_when_every_package_is_present(
+        self, fake_home: Path
+    ) -> None:
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh", fake_home, extra_env={"DPKG_INSTALLED_ALL": "1"}
+        )
+        assert result.returncode == 0, f"install.sh failed:\n{result.stdout}"
+
+        assert not (fake_home / "apt.log").exists(), "apt must not run needlessly"
+        sudo_log: Path = fake_home / "sudo.log"
+        if sudo_log.exists():
+            assert "apt-get" not in sudo_log.read_text()
+        assert "already installed" in result.stdout
+
+    def test_install_installs_only_the_configured_engine(self, fake_home: Path) -> None:
+        _write_config(fake_home, "engine=faster-whisper\nmodel=distil-medium.en\n")
+
+        result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
+        assert result.returncode == 0, f"install.sh failed:\n{result.stdout}"
+
+        pip_calls: str = (fake_home / "pip.log").read_text()
+        assert "faster-whisper av<19" in pip_calls
+        assert "torch" not in pip_calls, "the SenseVoice stack is not needed here"
+        assert "funasr" not in pip_calls
+
+    def test_install_installs_the_sensevoice_stack_by_default(
+        self, fake_home: Path
+    ) -> None:
+        result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
+        assert result.returncode == 0, f"install.sh failed:\n{result.stdout}"
+
+        pip_calls: str = (fake_home / "pip.log").read_text()
+        assert "install --user torch torchaudio" in pip_calls
+        assert "funasr" in pip_calls
+        assert "faster-whisper" not in pip_calls
+
+    def test_install_honours_an_engine_override(self, fake_home: Path) -> None:
+        _write_config(fake_home, "engine=sensevoice\n")
+
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh", fake_home, extra_env={"ENGINE": "vosk"}
+        )
+        assert result.returncode == 0, f"install.sh failed:\n{result.stdout}"
+
+        pip_calls: str = (fake_home / "pip.log").read_text()
+        assert "install --user vosk" in pip_calls
+        assert "torch" not in pip_calls
+
+    def test_install_skips_the_sensevoice_model_preload_for_another_engine(
+        self, fake_home: Path
+    ) -> None:
+        _write_config(fake_home, "engine=faster-whisper\n")
+
+        result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
+        assert result.returncode == 0, f"install.sh failed:\n{result.stdout}"
+
+        assert not (fake_home / "model.log").exists(), "no SenseVoice download expected"
+        assert "skipping" in result.stdout
+
+    def test_install_preloads_the_model_for_the_sensevoice_engine(
+        self, fake_home: Path
+    ) -> None:
+        result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
+        assert result.returncode == 0, f"install.sh failed:\n{result.stdout}"
+
+        assert (fake_home / "model.log").exists()
