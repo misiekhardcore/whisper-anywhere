@@ -79,6 +79,7 @@ step_system_packages() {
 				python3-pip \
 				python3-gi \
 				gir1.2-ayatanaappindicator3-0.1 \
+				gir1.2-dbusmenu-glib-0.4 \
 				ydotool \
 				pkg-config \
 				ffmpeg \

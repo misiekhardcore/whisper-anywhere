@@ -402,6 +402,7 @@ class TestInstallUninstall:
         packages: str = (fake_home / "apt.log").read_text()
         assert "python3-gi" in packages
         assert "gir1.2-ayatanaappindicator3-0.1" in packages
+        assert "gir1.2-dbusmenu-glib-0.4" in packages
 
     def test_install_enables_ydotool_on_wayland(self, fake_home: Path) -> None:
         result: subprocess.CompletedProcess = _run(

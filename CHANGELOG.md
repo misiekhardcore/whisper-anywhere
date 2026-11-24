@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The tray menu has a "Start at login" item that reads the two user units whenever the menu opens and enables or disables them
+
 ### Changed
 
 - A dictation is transcribed once, over the whole hotkey hold, and inserted once; the streaming mode that retyped text while you were still speaking is gone

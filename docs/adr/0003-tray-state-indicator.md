@@ -1,6 +1,6 @@
 # ADR 0003 - A tray indicator reports dictation state
 
-- Status: accepted, not yet implemented
+- Status: accepted, implemented
 - Date: 2026-11-22
 
 ## Context
