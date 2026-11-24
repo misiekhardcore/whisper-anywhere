@@ -1,5 +1,7 @@
 import asyncio
+import sys
 import threading
+import types
 from pathlib import Path
 
 import pytest
@@ -18,6 +20,35 @@ from whisper_anywhere.tray.client import StatusClient
 from whisper_anywhere.tray.controller import TrayController
 
 TIMEOUT = 5
+
+
+class TestTrayEntryPoint:
+    def test_names_the_gtk_and_appindicator_packages_when_absent(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from whisper_anywhere.tray.__main__ import main
+
+        monkeypatch.setitem(sys.modules, "gi", None)
+
+        assert main() == 1
+        error: str = capsys.readouterr().err
+        assert "python3-gi" in error
+        assert "gir1.2-ayatanaappindicator3-0.1" in error
+
+    def test_names_the_packages_when_a_typelib_namespace_is_missing(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from whisper_anywhere.tray.__main__ import main
+
+        class _FakeGi(types.ModuleType):
+            def require_version(self, namespace: str, version: str) -> None:
+                raise ValueError(f"Namespace {namespace} not available")
+
+        monkeypatch.setitem(sys.modules, "gi", _FakeGi("gi"))
+
+        assert main() == 1
+        error: str = capsys.readouterr().err
+        assert "gir1.2-ayatanaappindicator3-0.1" in error
 
 
 def _idle() -> Appearance:
@@ -275,6 +306,18 @@ class TestIcons:
             for size in (22, 44):
                 path = theme.joinpath(f"{size}x{size}", "apps", f"{icon}.png")
                 assert path.is_file(), path
+
+    @pytest.mark.parametrize("size", [48, 64, 128, 256])
+    def test_launcher_icon_ships_at_every_menu_size(self, size: int) -> None:
+        from importlib import resources
+
+        from PIL import Image
+
+        icon = resources.files("whisper_anywhere").joinpath(
+            "icons", "launcher", f"whisper-anywhere-{size}.png"
+        )
+        with icon.open("rb") as icon_file:
+            assert Image.open(icon_file).size == (size, size)
 
     @pytest.mark.parametrize("size", [22, 44])
     @pytest.mark.parametrize("background", [DARK_PANEL, LIGHT_PANEL])

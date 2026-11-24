@@ -1,9 +1,10 @@
-"""Draw the tray icons into the package. Development only: run after design changes.
+"""Draw the tray and launcher icons into the package. Development only: run after design changes.
 
 The panel host draws these pixels as they are: it exposes no way for a client to
 learn the panel's colour, and it does not recolour a themed PNG. So every shape
 is drawn twice - a dark keyline under a lighter core - and the icon stays legible
-whichever background the panel uses.
+whichever background the panel uses. The launcher icon puts the same microphone
+on an opaque tile so it reads as an app icon in the applications menu.
 """
 
 from pathlib import Path
@@ -14,8 +15,10 @@ ICONS_DIRECTORY: Path = (
     Path(__file__).resolve().parents[1] / "whisper_anywhere" / "icons"
 )
 THEME_DIRECTORY: Path = ICONS_DIRECTORY / "hicolor"
+LAUNCHER_DIRECTORY: Path = ICONS_DIRECTORY / "launcher"
 PANEL_SIZE = 22
 HIDPI_SIZE = 44
+LAUNCHER_SIZES = (48, 64, 128, 256)
 SUPERSAMPLE = 8
 
 INDEX_THEME = """[Icon Theme]
@@ -40,6 +43,8 @@ CORE_LIGHT = (242, 242, 242, 255)
 CORE_DIMMED = (152, 152, 152, 255)
 CORE_RED = (232, 74, 79, 255)
 CORE_GREEN = (61, 179, 97, 255)
+LAUNCHER_BACKGROUND = (36, 39, 46, 255)
+LAUNCHER_GLYPH_SHARE = 0.66
 
 # How deep the keyline runs under each core: the neutral icons lean on their
 # outline on a light panel, the coloured ones stay saturated on a dark one.
@@ -98,11 +103,31 @@ def _draw_microphone(
     return image.resize((size, size), Image.LANCZOS)
 
 
+def _draw_launcher(size: int) -> Image.Image:
+    """The microphone on an opaque tile, sized for the applications menu."""
+    scale = size * SUPERSAMPLE
+    tile = Image.new("RGBA", (scale, scale), (0, 0, 0, 0))
+    ImageDraw.Draw(tile).rounded_rectangle(
+        (0, 0, scale - 1, scale - 1),
+        radius=round(scale * 0.22),
+        fill=LAUNCHER_BACKGROUND,
+    )
+    tile = tile.resize((size, size), Image.LANCZOS)
+
+    glyph = _draw_microphone(
+        round(size * LAUNCHER_GLYPH_SHARE), CORE_LIGHT, CORES["idle"][1]
+    )
+    offset = ((size - glyph.width) // 2, (size - glyph.height) // 2)
+    tile.alpha_composite(glyph, offset)
+    return tile
+
+
 def main() -> None:
     """Write a hicolor theme, which is what a tray host can resolve by name."""
     (THEME_DIRECTORY / "22x22" / "apps").mkdir(parents=True, exist_ok=True)
     (THEME_DIRECTORY / "44x44" / "apps").mkdir(parents=True, exist_ok=True)
     (THEME_DIRECTORY / "index.theme").write_text(INDEX_THEME)
+    LAUNCHER_DIRECTORY.mkdir(parents=True, exist_ok=True)
     for name, (core, shade) in CORES.items():
         for size in (PANEL_SIZE, HIDPI_SIZE):
             path = (
@@ -113,6 +138,10 @@ def main() -> None:
             )
             _draw_microphone(size, core, shade).save(path)
             print(f"wrote {path.relative_to(ICONS_DIRECTORY.parents[1])}")
+    for size in LAUNCHER_SIZES:
+        path = LAUNCHER_DIRECTORY / f"whisper-anywhere-{size}.png"
+        _draw_launcher(size).save(path)
+        print(f"wrote {path.relative_to(ICONS_DIRECTORY.parents[1])}")
 
 
 if __name__ == "__main__":
