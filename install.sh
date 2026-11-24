@@ -33,6 +33,7 @@ need_root() {
 }
 
 pkg_install() {
+    require_sudo
     if command -v apt-get &>/dev/null; then
         $SUDO apt-get update -qq && $SUDO apt-get install -y "$@"
     else
@@ -66,6 +67,70 @@ select_python() {
     return 1
 }
 
+SYSTEM_PACKAGES=(
+    pulseaudio-utils
+    python3-evdev
+    python3-pip
+    python3-gi
+    gir1.2-ayatanaappindicator3-0.1
+    gir1.2-dbusmenu-glib-0.4
+    ydotool
+    pkg-config
+    ffmpeg
+    libavformat-dev
+    libavcodec-dev
+    libavdevice-dev
+    libavutil-dev
+    libavfilter-dev
+    libswscale-dev
+    libswresample-dev
+)
+SUDO=""
+
+# Only pay for privilege escalation when a step actually needs it.
+require_sudo() {
+    [ -n "$SUDO" ] || need_root
+}
+
+# Read one key from the same config the daemon reads, so an install cannot
+# disagree with the engine that runs.
+config_value() {
+    local key="$1" file="$CONFIG_DIR/config"
+    [ -f "$file" ] || return 0
+    awk -F= -v key="$key" '
+        $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+            value = $2
+            gsub(/[[:space:]#].*/, "", value)
+            print value
+            exit
+        }
+    ' "$file"
+}
+
+configured_engine() {
+    local configured
+    configured="$(config_value engine)"
+    printf '%s' "${configured:-sensevoice}"
+}
+
+# An editable install records the tree it was made from, so installing from a
+# linked worktree would leave the console scripts importing a directory that
+# disappears when that worktree is removed.
+primary_worktree() {
+    local first=""
+    first="$(git -C "$REPO_DIR" worktree list --porcelain 2>/dev/null \
+        | awk 'NR == 1 && /^worktree / { print $2 }')" || first=""
+    if [ -n "$first" ] && [ -d "$first" ]; then
+        printf '%s' "$first"
+        return 0
+    fi
+    printf '%s' "$REPO_DIR"
+}
+
+package_installed() {
+    dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"
+}
+
 # ---------------------------------------------------------------------------
 # steps
 # ---------------------------------------------------------------------------
@@ -73,43 +138,53 @@ select_python() {
 step_system_packages() {
     echo ""
     echo "==> Installing system packages..."
-    pkg_install \
-				pulseaudio-utils \
-				python3-evdev \
-				python3-pip \
-				python3-gi \
-				gir1.2-ayatanaappindicator3-0.1 \
-				gir1.2-dbusmenu-glib-0.4 \
-				ydotool \
-				pkg-config \
-				ffmpeg \
-				libavformat-dev \
-				libavcodec-dev \
-				libavdevice-dev \
-				libavutil-dev \
-				libavfilter-dev \
-				libswscale-dev \
-				libswresample-dev
+    local wanted=("${SYSTEM_PACKAGES[@]}") missing=() pkg
     if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-        info "Wayland detected — also installing the clipboard backend (wl-clipboard)"
-        pkg_install wl-clipboard
+        wanted+=(wl-clipboard)
     fi
+    for pkg in "${wanted[@]}"; do
+        package_installed "$pkg" || missing+=("$pkg")
+    done
+    if [ ${#missing[@]} -eq 0 ]; then
+        info "all ${#wanted[@]} system packages are already installed — skipping apt"
+        return 0
+    fi
+    info "installing ${#missing[@]} missing package(s): ${missing[*]}"
+    pkg_install "${missing[@]}"
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        info "Wayland detected — the clipboard backend (wl-clipboard) is included"
+    fi
+}
+
+pip_install_user() {
+    "$PYTHON" -m pip install --user "$@" 2>/dev/null \
+        || "$PYTHON" -m pip install --user --break-system-packages "$@"
+}
+
+# funasr builds from source when no wheel matches, so it needs a compiler.
+pip_install_funasr() {
+    CC=gcc CXX=g++ "$PYTHON" -m pip install --user funasr 2>/dev/null \
+        || CC=gcc CXX=g++ "$PYTHON" -m pip install --user --break-system-packages funasr
 }
 
 step_python_packages() {
     echo ""
-    echo "==> Installing Python packages..."
-    # SenseVoice runs on CPU and requires PyTorch.
-    "$PYTHON" -m pip install --user torch torchaudio \
-        --index-url https://download.pytorch.org/whl/cpu 2>/dev/null \
-        || "$PYTHON" -m pip install --user --break-system-packages \
-            torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-    # sensevoice (default engine) via funasr
-    "$PYTHON" -m pip install --user funasr 2>/dev/null \
-        || CC=gcc CXX=g++ "$PYTHON" -m pip install --user --break-system-packages funasr
-    # faster-whisper currently needs PyAV below 19 for audio decoding.
-    "$PYTHON" -m pip install --user faster-whisper "av<19" 2>/dev/null \
-        || "$PYTHON" -m pip install --user --break-system-packages faster-whisper "av<19"
+    echo "==> Installing Python packages for the '$ENGINE' engine..."
+    case "$ENGINE" in
+        faster-whisper)
+            # faster-whisper calls decoding APIs that av 19 removed.
+            pip_install_user faster-whisper "av<19"
+            ;;
+        vosk)
+            pip_install_user vosk
+            ;;
+        *)
+            # SenseVoice runs on CPU and requires PyTorch.
+            pip_install_user torch torchaudio \
+                --index-url https://download.pytorch.org/whl/cpu
+            pip_install_funasr
+            ;;
+    esac
 }
 
 step_bridge_system_packages() {
@@ -124,6 +199,7 @@ step_input_group() {
     if groups "$USER" | grep -q input; then
         info "already in input group"
     else
+        require_sudo
         $SUDO usermod -a -G input "$USER"
         info "added to input group — you'll need to log out and back in (or reboot)"
     fi
@@ -141,6 +217,11 @@ step_ydotool_service() {
 }
 
 step_model() {
+    if [ "$ENGINE" != "sensevoice" ]; then
+        echo ""
+        info "skipping the SenseVoice pre-load — the configured engine is '$ENGINE'"
+        return 0
+    fi
     echo ""
     echo "==> Pre-loading default model ($MODEL)..."
     # funasr/SenseVoice auto-downloads on first use; this pre-warms the cache.
@@ -157,9 +238,26 @@ sys.stderr.write('Model $MODEL ready.\n')
 step_install_package() {
     echo ""
     echo "==> Installing whisper-anywhere package..."
-    "$PYTHON" -m pip install --user -e "$REPO_DIR" 2>/dev/null \
-        || "$PYTHON" -m pip install --user --break-system-packages -e "$REPO_DIR"
-    info "installed as pip package from $REPO_DIR"
+    if [ "$INSTALL_DIR" != "$REPO_DIR" ]; then
+        info "installing from the primary worktree at $INSTALL_DIR"
+    fi
+    pip_install_user -e "$INSTALL_DIR"
+    info "installed as pip package from $INSTALL_DIR"
+}
+
+step_verify_install() {
+    echo ""
+    echo "==> Checking the installed package..."
+    local resolved=""
+    if ! resolved="$(cd / && "$PYTHON" -c \
+        'import os, whisper_anywhere; print(os.path.dirname(os.path.dirname(os.path.abspath(whisper_anywhere.__file__))))' \
+        2>/dev/null)"; then
+        error "the installed package is not importable outside the source tree — reinstall with: $PYTHON -m pip install --user -e $INSTALL_DIR"
+    fi
+    if [ "$resolved" != "$INSTALL_DIR" ]; then
+        error "the installed package resolves to $resolved instead of $INSTALL_DIR — reinstall with: $PYTHON -m pip install --user -e $INSTALL_DIR"
+    fi
+    info "the installed package imports from $resolved"
 }
 
 step_units() {
@@ -216,7 +314,9 @@ step_autostart() {
 }
 
 step_start() {
-    systemctl --user start whisper-anywhere.service whisper-anywhere-tray.service 2>/dev/null || true
+    # restart, not start: on an upgrade the old processes are still running, and
+    # start would leave them on the previous code until the next logout.
+    systemctl --user restart whisper-anywhere.service whisper-anywhere-tray.service 2>/dev/null || true
     if systemctl --user is-active whisper-anywhere.service &>/dev/null; then
         info "whisper-anywhere service is running"
     else
@@ -311,7 +411,9 @@ EOF
 }
 
 summary() {
-    local start_at_login="$1"
+    local start_at_login="$1" hotkey="$HOTKEY"
+    # The config is what the daemon reads, so it is what the summary must show.
+    [ -n "$hotkey" ] || hotkey="$(config_value hotkey)"
     echo ""
     echo "============================================"
     echo "  whisper-anywhere is installed!"
@@ -326,8 +428,8 @@ summary() {
     echo "  Usage:"
     echo "    $ whisper-anywhere"
     echo ""
-    if [ -n "$HOTKEY" ]; then
-        echo "    Hotkey: $HOTKEY (hold to record, release to transcribe)"
+    if [ -n "$hotkey" ]; then
+        echo "    Hotkey: $hotkey (hold to record, release to transcribe)"
     else
         echo "    Hotkey: Ctrl+Super+Space (hold to record, release to transcribe)"
         echo "           (or set hotkey=KEY_F12 in $CONFIG_DIR/config)"
@@ -368,6 +470,7 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     echo "  MODEL    SenseVoice model name  (default: iic/SenseVoiceSmall)"
     echo "  HOTKEY   Single key like KEY_F12  (default: none → Ctrl+Super+Space combo)"
     echo "  PYTHON   Python 3.10-3.14 interpreter path  (default: auto-detected)"
+    echo "  ENGINE   sensevoice, faster-whisper or vosk  (default: engine= in the config, else sensevoice)"
     echo "  AUTOSTART  1 to enable login autostart, 0 to leave it off  (default: 1; only read when stdin is not a terminal)"
     exit 0
 fi
@@ -382,7 +485,8 @@ if [ -n "$PYTHON" ]; then
         error "PYTHON=$PYTHON is not a supported Python (need 3.10-3.14); set it to a supported interpreter or unset it to auto-detect"
 fi
 
-need_root
+INSTALL_DIR="$(primary_worktree)"
+ENGINE="${ENGINE:-$(configured_engine)}"
 step_system_packages
 if [ -z "$PYTHON" ]; then
     PYTHON="$(select_python)" || error "no supported Python found (need 3.10-3.14 with python3-evdev); install python3-evdev or set PYTHON to a supported interpreter"
@@ -393,6 +497,7 @@ step_input_group
 step_ydotool_service
 step_python_packages
 step_install_package
+step_verify_install
 step_model
 step_config
 start_at_login="$(resolve_autostart)"

@@ -43,6 +43,14 @@ cd whisper-anywhere
 bash install.sh
 ```
 
+The installer installs only the Python stack the configured engine needs: it reads
+`engine=` from `~/.config/whisper-anywhere/config` (SenseVoice when unset), so a
+faster-whisper or Vosk setup never downloads PyTorch, and the SenseVoice model is
+only pre-loaded for the SenseVoice engine. Pass `ENGINE=faster-whisper bash install.sh`
+to choose it for a fresh install. System packages that are already present are left
+alone, so a second run needs no password, and the run fails loudly when the package
+it just installed cannot be imported outside the source tree.
+
 Or manually, step by step. Use a supported interpreter (3.10-3.14) for the commands
 below; if `python3` points at a newer version, substitute `python3.14` (or another
 supported version).
