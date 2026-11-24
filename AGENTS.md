@@ -24,12 +24,12 @@ The daemon is a Python package `whisper_anywhere/` installed via `pip install -e
 ```
 whisper_anywhere/
 ├── __init__.py
-├── __main__.py      # entry point: main(), config resolution (load_hotkey, load_engine)
+├── __main__.py      # entry point: main(), config resolution (load_hotkey, plan_engine)
 ├── audio.py         # write_wav(), read_audio(), stop_recording(), runtime paths
 ├── config.py        # check_deps(), load_config(), parse_args(), runtime_dir()
 ├── daemon.py        # Daemon.run(), _pump_device(), keyboard device handling
 ├── keyboard.py      # find_keyboards(), keys_held()
-├── lock.py          # acquire_lock(), _remove_lock(), LOCK_PATH
+├── lock.py          # Lock.acquire(), Lock.release(), LOCK_PATH
 ├── output.py        # async emit() -> inserter
 ├── recording.py     # Recording, Recorder.start(), Recorder.finish()
 ├── transcribe/      # load_engine(), Transcriber protocol, one module per engine
@@ -66,7 +66,8 @@ whisper_anywhere/
 - `find_keyboards()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
 - `check_deps(engine, insertion)` — verifies `parec` is on PATH, `evdev` imports, the selected engine's package is importable (`funasr` for SenseVoice only, `faster_whisper`, or `vosk`), and the already-resolved insertion strategy is usable; `main()` resolves that strategy once, so the diagnosis and the running inserter cannot disagree
 - `select_insertion()` — resolves insertion once at startup: clipboard paste when a Wayland clipboard backend and a chord injector exist, otherwise typing; returns the description, an optional warning and the inserter
-- `load_model()` — initializes the transcription engine (default: SenseVoice via `funasr.AutoModel`). Pluggable via the `Transcriber` protocol — see `register_engine()`.
+- `load_engine(engine_id, model_id, language)` — builds the selected engine from the `register_engine()` registry, defaulting to SenseVoice and `iic/SenseVoiceSmall`
+- `plan_engine()` — resolves engine id and model from CLI, then config, and defers the `load_engine()` call until the daemon has published loading
 - `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
 - `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
 - `Recorder.start()` — spawns `parec --raw` and returns a `Recording` (process, reader task, PCM buffer)
