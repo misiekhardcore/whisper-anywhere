@@ -79,11 +79,11 @@ systemctl --user enable --now ydotool.service
 
 `install.sh` installs two `systemd --user` units, `whisper-anywhere.service` (the
 daemon) and `whisper-anywhere-tray.service` (the tray indicator), enables autostart,
-starts both, and adds an applications-menu launcher that starts both through
-`systemctl --user`. Autostart is on by default: the installer asks one question on a
-terminal, and a scripted install honours `AUTOSTART=0` or `AUTOSTART=1`. The tray
-follows the graphical session and never restarts on its own, so a headless desktop
-cannot restart-storm it.
+starts both, and adds a searchable applications-menu launcher with its own icon
+that starts both through `systemctl --user`. Autostart is on by default: the
+installer asks one question on a terminal, and a scripted install honours
+`AUTOSTART=0` or `AUTOSTART=1`. The tray follows the graphical session and never
+restarts on its own, so a headless desktop cannot restart-storm it.
 
 ```bash
 systemctl --user status whisper-anywhere whisper-anywhere-tray   # check they run
@@ -252,10 +252,10 @@ whisper-anywhere/
 bash uninstall.sh
 ```
 
-Removes both systemd user units, the applications-menu launcher and the status socket,
-uninstalls the pip package, and offers to delete your config. The HuggingFace model
-cache, pip dependencies, and `input`-group membership are left in place (the script
-prints how to remove them).
+Removes both systemd user units, the applications-menu launcher and its icon, and
+the status socket, uninstalls the pip package, and offers to delete your config.
+The HuggingFace model cache, pip dependencies, and `input`-group membership are
+left in place (the script prints how to remove them).
 
 ## License
 

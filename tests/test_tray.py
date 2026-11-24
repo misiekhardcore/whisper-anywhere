@@ -307,6 +307,18 @@ class TestIcons:
                 path = theme.joinpath(f"{size}x{size}", "apps", f"{icon}.png")
                 assert path.is_file(), path
 
+    @pytest.mark.parametrize("size", [48, 64, 128, 256])
+    def test_launcher_icon_ships_at_every_menu_size(self, size: int) -> None:
+        from importlib import resources
+
+        from PIL import Image
+
+        icon = resources.files("whisper_anywhere").joinpath(
+            "icons", "launcher", f"whisper-anywhere-{size}.png"
+        )
+        with icon.open("rb") as icon_file:
+            assert Image.open(icon_file).size == (size, size)
+
     @pytest.mark.parametrize("size", [22, 44])
     @pytest.mark.parametrize("background", [DARK_PANEL, LIGHT_PANEL])
     def test_every_icon_stays_visible_on_any_panel_background(

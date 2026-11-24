@@ -9,6 +9,7 @@ CONFIG_DIR="$HOME/.config/whisper-anywhere"
 AUTOSTART_DIR="$HOME/.config/autostart"
 SERVICE_DIR="$HOME/.config/systemd/user"
 APPLICATIONS_DIR="$HOME/.local/share/applications"
+ICON_THEME_DIR="$HOME/.local/share/icons/hicolor"
 MODEL="${MODEL:-iic/SenseVoiceSmall}"
 HOTKEY="${HOTKEY:-}"
 PYTHON="${PYTHON:-}"
@@ -252,12 +253,29 @@ step_launcher() {
 [Desktop Entry]
 Type=Application
 Name=whisper-anywhere
+GenericName=Voice dictation
 Comment=Hold a hotkey, speak, release - text appears wherever the cursor is
 Exec=systemctl --user start whisper-anywhere.service whisper-anywhere-tray.service
-Icon=audio-input-microphone
+Icon=whisper-anywhere
+Keywords=dictation;speech;voice;transcription;microphone;speech-to-text;
 Terminal=false
 Categories=Utility;
 EOF
+
+    # The menu lets the icon theme resolve the entry's Icon= by name.
+    local source size target
+    for source in "$REPO_DIR"/whisper_anywhere/icons/launcher/whisper-anywhere-*.png; do
+        size="$(basename "$source" .png)"
+        size="${size##*-}"
+        target="$ICON_THEME_DIR/${size}x${size}/apps"
+        mkdir -p "$target"
+        cp "$source" "$target/whisper-anywhere.png"
+    done
+
+    # Some menus cache desktop entries; refresh it when the tool is present.
+    if command -v update-desktop-database &>/dev/null; then
+        update-desktop-database "$APPLICATIONS_DIR" 2>/dev/null || true
+    fi
     info "launcher installed at $APPLICATIONS_DIR/whisper-anywhere.desktop"
 }
 

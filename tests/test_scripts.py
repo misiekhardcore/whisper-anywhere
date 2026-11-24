@@ -345,7 +345,7 @@ class TestInstallUninstall:
         calls: str = (fake_home / "systemctl.log").read_text()
         assert "enable whisper-anywhere.service whisper-anywhere-tray.service" in calls
 
-    def test_install_writes_launcher_that_starts_both_units(
+    def test_install_writes_a_searchable_launcher_with_its_own_icon(
         self, fake_home: Path
     ) -> None:
         result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
@@ -360,6 +360,23 @@ class TestInstallUninstall:
             "Exec=systemctl --user start whisper-anywhere.service "
             "whisper-anywhere-tray.service"
         ) in entry
+        assert "Icon=whisper-anywhere" in entry
+        assert "Keywords=" in entry and "dictation" in entry
+        assert "NoDisplay=true" not in entry and "Hidden=true" not in entry
+
+        for size in (48, 64, 128, 256):
+            icon: Path = (
+                fake_home
+                / ".local"
+                / "share"
+                / "icons"
+                / "hicolor"
+                / f"{size}x{size}"
+                / "apps"
+                / "whisper-anywhere.png"
+            )
+            assert icon.is_file(), f"launcher icon missing at {icon}"
+            assert icon.stat().st_size > 0, f"launcher icon empty at {icon}"
 
     def test_install_writes_tray_unit_for_the_graphical_session(
         self, fake_home: Path
@@ -465,6 +482,16 @@ class TestInstallUninstall:
         assert not (service_dir / "whisper-anywhere.service").exists()
         assert not (service_dir / "whisper-anywhere-tray.service").exists()
         assert not socket.exists(), "status socket should be removed"
+        assert not (
+            fake_home
+            / ".local"
+            / "share"
+            / "icons"
+            / "hicolor"
+            / "256x256"
+            / "apps"
+            / "whisper-anywhere.png"
+        ).exists(), "launcher icon should be removed"
 
     def test_uninstall_keeps_config_when_declined(self, fake_home: Path) -> None:
         _run(REPO_DIR / "install.sh", fake_home)
