@@ -4,12 +4,14 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
 BIN_TARGET="$BIN_DIR/whisper-anywhere"
+TRAY_TARGET="$BIN_DIR/whisper-anywhere-tray"
 CONFIG_DIR="$HOME/.config/whisper-anywhere"
 AUTOSTART_DIR="$HOME/.config/autostart"
 SERVICE_DIR="$HOME/.config/systemd/user"
+APPLICATIONS_DIR="$HOME/.local/share/applications"
 MODEL="${MODEL:-iic/SenseVoiceSmall}"
 HOTKEY="${HOTKEY:-}"
-PYTHON="${PYTHON:-$(which python3)}"
+PYTHON="${PYTHON:-}"
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -37,6 +39,32 @@ pkg_install() {
     fi
 }
 
+# torchaudio publishes no cp315 wheels, so the full stack runs on Python 3.10-3.14.
+supported_python_version() {
+    local path="$1" version
+    version="$("$path" --version 2>&1)" || return 1
+    case "$version" in
+        "Python 3.10"*|"Python 3.11"*|"Python 3.12"*|"Python 3.13"*|"Python 3.14"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+supported_python() {
+    supported_python_version "$1" || return 1
+    "$1" -c "import evdev" 2>/dev/null
+}
+
+select_python() {
+    local candidate path
+    for candidate in python3 python3.14 python3.13 python3.12 python3.11 python3.10 /usr/bin/python3; do
+        path="$(type -P "$candidate" 2>/dev/null)" || continue
+        supported_python "$path" || continue
+        printf '%s' "$path"
+        return 0
+    done
+    return 1
+}
+
 # ---------------------------------------------------------------------------
 # steps
 # ---------------------------------------------------------------------------
@@ -48,6 +76,8 @@ step_system_packages() {
 				pulseaudio-utils \
 				python3-evdev \
 				python3-pip \
+				python3-gi \
+				gir1.2-ayatanaappindicator3-0.1 \
 				ydotool \
 				pkg-config \
 				ffmpeg \
@@ -130,9 +160,9 @@ step_install_package() {
     info "installed as pip package from $REPO_DIR"
 }
 
-step_service() {
+step_units() {
     echo ""
-    echo "==> Setting up systemd user service (autostart + logging)..."
+    echo "==> Setting up systemd user services (autostart + logging)..."
     mkdir -p "$SERVICE_DIR"
 
     # Hotkey/model/language are read from the config file, so the unit never
@@ -152,18 +182,83 @@ RestartSec=2
 WantedBy=default.target
 EOF
 
+    # The tray follows the graphical session and never restarts on its own: a
+    # headless or hostless desktop must not restart-storm it.
+    cat > "$SERVICE_DIR/whisper-anywhere-tray.service" << EOF
+[Unit]
+Description=whisper-anywhere tray indicator
+After=graphical-session.target
+
+[Service]
+ExecStart=$TRAY_TARGET
+Restart=no
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
     # Migrate away from the old XDG autostart entry if a previous install left one.
     rm -f "$AUTOSTART_DIR/whisper-anywhere.desktop"
+}
 
+step_autostart() {
+    local start_at_login="$1"
     systemctl --user daemon-reload 2>/dev/null || true
-    systemctl --user enable --now whisper-anywhere.service 2>/dev/null || true
+    if [ "$start_at_login" = "1" ]; then
+        systemctl --user enable whisper-anywhere.service whisper-anywhere-tray.service 2>/dev/null || true
+        info "autostart enabled for both units"
+    else
+        systemctl --user disable whisper-anywhere.service whisper-anywhere-tray.service 2>/dev/null || true
+        info "autostart disabled — start it from the menu or: systemctl --user start whisper-anywhere"
+    fi
+}
+
+step_start() {
+    systemctl --user start whisper-anywhere.service whisper-anywhere-tray.service 2>/dev/null || true
     if systemctl --user is-active whisper-anywhere.service &>/dev/null; then
         info "whisper-anywhere service is running"
     else
-        warn "service not active yet — after logging in run: systemctl --user enable --now whisper-anywhere.service"
+        warn "service not active yet — run: systemctl --user start whisper-anywhere"
     fi
-    info "service installed at $SERVICE_DIR/whisper-anywhere.service"
+    info "units installed at $SERVICE_DIR"
     info "logs: journalctl --user -u whisper-anywhere -f"
+}
+
+resolve_autostart() {
+    # Prints 1 or 0: enabled by default, one question on a TTY, AUTOSTART when scripted.
+    local start_at_login=1
+    if [ -t 0 ]; then
+        local answer=""
+        # EOF or Ctrl-D means the documented default: yes.
+        read -r -p "  Start whisper-anywhere at login? [Y/n] " answer || true
+        case "$answer" in
+            n|N|no|No|NO) start_at_login=0 ;;
+        esac
+    elif [ -n "${AUTOSTART:-}" ]; then
+        case "$AUTOSTART" in
+            0|no|false) start_at_login=0 ;;
+        esac
+    fi
+    printf '%s' "$start_at_login"
+}
+
+step_launcher() {
+    echo ""
+    echo "==> Adding the desktop launcher..."
+    mkdir -p "$APPLICATIONS_DIR"
+    # Launcher and login autostart both start the units through systemctl --user,
+    # so they share one supervisor; each unit keeps its own journald log.
+    cat > "$APPLICATIONS_DIR/whisper-anywhere.desktop" << EOF
+[Desktop Entry]
+Type=Application
+Name=whisper-anywhere
+Comment=Hold a hotkey, speak, release - text appears wherever the cursor is
+Exec=systemctl --user start whisper-anywhere.service whisper-anywhere-tray.service
+Icon=audio-input-microphone
+Terminal=false
+Categories=Utility;
+EOF
+    info "launcher installed at $APPLICATIONS_DIR/whisper-anywhere.desktop"
 }
 
 step_config() {
@@ -197,6 +292,7 @@ EOF
 }
 
 summary() {
+    local start_at_login="$1"
     echo ""
     echo "============================================"
     echo "  whisper-anywhere is installed!"
@@ -225,9 +321,14 @@ summary() {
         echo "  Insertion: typing through ydotool (no clipboard backend on this session)"
     fi
     echo ""
-    echo "  The daemon runs as a systemd user service and auto-starts on login."
-    echo "    start now:  systemctl --user start whisper-anywhere"
-    echo "    status:     systemctl --user status whisper-anywhere"
+    if [ "$start_at_login" = "1" ]; then
+        echo "  The daemon and the tray run as systemd user services and auto-start on login."
+    else
+        echo "  The daemon and the tray run as systemd user services but will not start at login."
+        echo "  Launch them from the menu, or enable autostart: systemctl --user enable whisper-anywhere whisper-anywhere-tray"
+    fi
+    echo "    start now:  systemctl --user start whisper-anywhere whisper-anywhere-tray"
+    echo "    status:     systemctl --user status whisper-anywhere whisper-anywhere-tray"
     echo "    logs:       journalctl --user -u whisper-anywhere -f"
     echo "    after edits: systemctl --user restart whisper-anywhere"
     echo ""
@@ -247,7 +348,8 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     echo "Environment variables:"
     echo "  MODEL    SenseVoice model name  (default: iic/SenseVoiceSmall)"
     echo "  HOTKEY   Single key like KEY_F12  (default: none → Ctrl+Super+Space combo)"
-    echo "  PYTHON   Python interpreter path  (default: python3 from PATH)"
+    echo "  PYTHON   Python 3.10-3.14 interpreter path  (default: auto-detected)"
+    echo "  AUTOSTART  1 to enable login autostart, 0 to leave it off  (default: 1; only read when stdin is not a terminal)"
     exit 0
 fi
 
@@ -255,8 +357,18 @@ echo ""
 echo "  whisper-anywhere installer"
 echo "  ========================="
 
+if [ -n "$PYTHON" ]; then
+    # Explicit overrides are version-checked here; the evdev bridge runs later.
+    supported_python_version "$PYTHON" ||
+        error "PYTHON=$PYTHON is not a supported Python (need 3.10-3.14); set it to a supported interpreter or unset it to auto-detect"
+fi
+
 need_root
 step_system_packages
+if [ -z "$PYTHON" ]; then
+    PYTHON="$(select_python)" || error "no supported Python found (need 3.10-3.14 with python3-evdev); install python3-evdev or set PYTHON to a supported interpreter"
+    info "using $PYTHON ($("$PYTHON" --version 2>&1))"
+fi
 step_bridge_system_packages
 step_input_group
 step_ydotool_service
@@ -264,5 +376,9 @@ step_python_packages
 step_install_package
 step_model
 step_config
-step_service
-summary
+start_at_login="$(resolve_autostart)"
+step_units
+step_autostart "$start_at_login"
+step_start
+step_launcher
+summary "$start_at_login"

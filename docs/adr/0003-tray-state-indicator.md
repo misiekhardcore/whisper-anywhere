@@ -102,7 +102,7 @@ Payload is one newline-terminated JSON object per update:
   daemon unit keeps its current shape.
 - A launcher entry in `~/.local/share/applications` runs
   `systemctl --user start` for both units, so the launcher, login autostart and
-  the tray all pass through one supervisor and one log.
+  the tray all pass through one supervisor; each unit keeps its own journald log.
 - Autostart is enabled by default: `install.sh` asks on a TTY and honours
   `AUTOSTART=0|1` when it is not interactive. `uninstall.sh` removes the
   launcher entry, both units and the socket.

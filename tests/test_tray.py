@@ -1,5 +1,7 @@
 import asyncio
+import sys
 import threading
+import types
 from pathlib import Path
 
 import pytest
@@ -18,6 +20,35 @@ from whisper_anywhere.tray.client import StatusClient
 from whisper_anywhere.tray.controller import TrayController
 
 TIMEOUT = 5
+
+
+class TestTrayEntryPoint:
+    def test_names_the_gtk_and_appindicator_packages_when_absent(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from whisper_anywhere.tray.__main__ import main
+
+        monkeypatch.setitem(sys.modules, "gi", None)
+
+        assert main() == 1
+        error: str = capsys.readouterr().err
+        assert "python3-gi" in error
+        assert "gir1.2-ayatanaappindicator3-0.1" in error
+
+    def test_names_the_packages_when_a_typelib_namespace_is_missing(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from whisper_anywhere.tray.__main__ import main
+
+        class _FakeGi(types.ModuleType):
+            def require_version(self, namespace: str, version: str) -> None:
+                raise ValueError(f"Namespace {namespace} not available")
+
+        monkeypatch.setitem(sys.modules, "gi", _FakeGi("gi"))
+
+        assert main() == 1
+        error: str = capsys.readouterr().err
+        assert "gir1.2-ayatanaappindicator3-0.1" in error
 
 
 def _idle() -> Appearance:

@@ -22,11 +22,18 @@ which is why a single hold is capped at 60 seconds.
 
 - **Ubuntu** (or Debian-based distro with `apt`)
 - **PulseAudio or PipeWire** (for `parec`)
+- **Python 3.10-3.14** with `python3-evdev` for keyboard access. The installer picks a
+  supported interpreter automatically, so a newer `python3` on `PATH` (such as Homebrew
+  3.15) is skipped; an explicit `PYTHON` is checked against the same range. Python 3.15
+  is not supported yet because `torchaudio` has no 3.15 wheels.
 - **A Wayland or X11 desktop** — `ydotool` injects keystrokes via the kernel `uinput`
   device, so it works under either (tested on GNOME and KDE Plasma)
 - **`wl-clipboard`** (`wl-copy`/`wl-paste`) on Wayland, for the preferred clipboard
   insertion; without it the transcript is typed instead
-- **systemd** (the daemon installs as a `systemd --user` service)
+- **GTK 3 and AppIndicator** (`python3-gi`, `gir1.2-ayatanaappindicator3-0.1`) for the
+  tray indicator. GNOME also needs the AppIndicator extension to host it; without a
+  host the tray logs why it is not showing and retries
+- **systemd** (the daemon and the tray install as `systemd --user` services)
 
 ## Quick install
 
@@ -36,11 +43,14 @@ cd whisper-anywhere
 bash install.sh
 ```
 
-Or manually, step by step:
+Or manually, step by step. Use a supported interpreter (3.10-3.14) for the commands
+below; if `python3` points at a newer version, substitute `python3.14` (or another
+supported version).
 
 ```bash
 # system dependencies
-sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool
+sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool \
+  python3-gi gir1.2-ayatanaappindicator3-0.1
 # on Wayland, the clipboard backend used for insertion
 sudo apt install wl-clipboard
 
@@ -67,13 +77,25 @@ systemctl --user enable --now ydotool.service
 
 ## Usage
 
-`install.sh` sets the daemon up as a `systemd --user` service that auto-starts on login:
+`install.sh` installs two `systemd --user` units, `whisper-anywhere.service` (the
+daemon) and `whisper-anywhere-tray.service` (the tray indicator), enables autostart,
+starts both, and adds an applications-menu launcher that starts both through
+`systemctl --user`. Autostart is on by default: the installer asks one question on a
+terminal, and a scripted install honours `AUTOSTART=0` or `AUTOSTART=1`. The tray
+follows the graphical session and never restarts on its own, so a headless desktop
+cannot restart-storm it.
 
 ```bash
-systemctl --user status whisper-anywhere      # check it's running
-journalctl --user -u whisper-anywhere -f       # follow logs
-systemctl --user restart whisper-anywhere      # apply config changes
+systemctl --user status whisper-anywhere whisper-anywhere-tray   # check they run
+journalctl --user -u whisper-anywhere -f                          # daemon logs
+journalctl --user -u whisper-anywhere-tray -f                     # tray logs
+systemctl --user restart whisper-anywhere                         # apply config changes
+systemctl --user start whisper-anywhere whisper-anywhere-tray     # start both
 ```
+
+The launcher entry, login autostart and the tray all start through the same
+systemd user manager, so they share one lifecycle; each unit keeps its own
+journald log.
 
 Or run it in the foreground (useful for debugging):
 
@@ -210,6 +232,8 @@ whisper-anywhere/
 │   ├── lock.py          # single-instance lock
 │   ├── output.py        # text output (stdout / insertion)
 │   ├── recording.py     # one recording and one transcription per dictation
+│   ├── state.py         # daemon state and the status socket
+│   ├── tray/            # separate tray process: appearance, socket client, GTK view
 │   ├── transcribe/      # model loading and engine registry
 │   └── insertion/       # clipboard backend, paste chord, clipboard and typing inserters
 ├── tests/               # pytest suite
@@ -228,9 +252,10 @@ whisper-anywhere/
 bash uninstall.sh
 ```
 
-Removes the systemd user service and the pip package, and offers to delete your config.
-The HuggingFace model cache, pip dependencies, and `input`-group membership are left in
-place (the script prints how to remove them).
+Removes both systemd user units, the applications-menu launcher and the status socket,
+uninstalls the pip package, and offers to delete your config. The HuggingFace model
+cache, pip dependencies, and `input`-group membership are left in place (the script
+prints how to remove them).
 
 ## License
 
