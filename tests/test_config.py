@@ -167,6 +167,39 @@ class _FakeInserter(TextInserter):
     def insert_text(self, text: str) -> None: ...
 
 
+class TestCheckDepsEngine:
+    @staticmethod
+    def _parec_present():
+        return patch(
+            "whisper_anywhere.config.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        )
+
+    def test_faster_whisper_does_not_require_funasr(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with (
+            self._parec_present(),
+            patch.dict(sys.modules, {"funasr": None, "faster_whisper": MagicMock()}),
+        ):
+            Config.check_deps("faster-whisper")
+
+        assert "funasr" not in capsys.readouterr().err
+
+    def test_sensevoice_requires_funasr(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with (
+            self._parec_present(),
+            patch.dict(sys.modules, {"funasr": None}),
+            pytest.raises(SystemExit) as exc,
+        ):
+            Config.check_deps("sensevoice")
+
+        assert exc.value.code == 1
+        assert "funasr" in capsys.readouterr().err
+
+
 class TestCheckDepsInsertion:
     @staticmethod
     def _present_dependencies():
