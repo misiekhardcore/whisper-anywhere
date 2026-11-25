@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A dictation is transcribed once, over the whole hotkey hold, and inserted once; the streaming mode that retyped text while you were still speaking is gone
 - `--stdout` prints exactly one `{"type": "final", "text": ...}` line per dictation. This is a breaking change for line consumers: the `{"type": "partial", ...}` lines no longer exist, so react to final lines only
 - The dependency check requires `funasr` only for the SenseVoice engine
-- Insertion writes the transcript to the clipboard and sends one paste chord (Ctrl+V through `ydotool`, or `wtype` when `ydotool` is absent) instead of typing every character; typing remains the fallback when no clipboard tool is available
+- Insertion writes the transcript to the clipboard and sends one paste chord (Ctrl+V through `ydotool`, or `wtype` when `ydotool` is absent) instead of typing every character, and it is the only mechanism: a missing clipboard backend or chord injector now stops startup with the package to install
 - The transcript is left on the clipboard after a successful paste
 - The dependency check and installer name the clipboard backend and chord injector
 - `install.sh` installs the Python stack of the configured engine only, and pre-loads the SenseVoice model only for the SenseVoice engine; `ENGINE` picks the engine for a fresh install
@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The streaming transcription mode, its speech-detection model, the `--vad` flag, and the `vad_engine` / `vad` configuration keys. Config files that still contain those keys keep starting; they are ignored
 - Backspacing and retyping already-inserted text, which the `Typer` implementations no longer offer
 - The `wtype` compositor probe that injected a stray Ctrl keystroke into the focused window at startup; tool presence and session type now decide insertion
+- Typing insertion (`ydotool type` / `wtype` text) and its `TypingInserter`; the transcript is always pasted, never typed
 
 ### Fixed
 

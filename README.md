@@ -29,8 +29,10 @@ which is why a single hold is capped at 60 seconds.
   is not supported yet because `torchaudio` has no 3.15 wheels.
 - **A Wayland or X11 desktop** — `ydotool` injects keystrokes via the kernel `uinput`
   device, so it works under either (tested on GNOME and KDE Plasma)
-- **`wl-clipboard`** (`wl-copy`/`wl-paste`) on Wayland, for the preferred clipboard
-  insertion; without it the transcript is typed instead
+- **`wl-clipboard`** (`wl-copy`/`wl-paste`) on Wayland, the clipboard backend for
+  that session; without it dictation cannot insert and the daemon says so
+- **`xclip`** on X11, the clipboard backend for that session; without it dictation
+  cannot insert and the daemon says so
 - **GTK 3 and AppIndicator** (`python3-gi`, `gir1.2-ayatanaappindicator3-0.1`) for the
   tray indicator. GNOME also needs the AppIndicator extension to host it; without a
   host the tray logs why it is not showing and retries
@@ -60,8 +62,10 @@ supported version).
 # system dependencies
 sudo apt install pulseaudio-utils python3-evdev python3-pip ydotool \
   python3-gi gir1.2-ayatanaappindicator3-0.1
-# on Wayland, the clipboard backend used for insertion
+# the clipboard backend used for insertion: wl-clipboard on Wayland,
+# xclip on X11
 sudo apt install wl-clipboard
+sudo apt install xclip
 
 # Python packages (default: sensevoice via funasr)
 python3 -m pip install --user torch torchaudio \
@@ -118,7 +122,10 @@ Either way: hold the hotkey, speak, release. Text appears wherever your cursor i
 
 The transcript is written to the system clipboard and a single paste chord is sent,
 so the focused application receives one paste instead of a keystroke stream. The
-preferred path is `wl-copy`/`wl-paste` (Wayland) plus `ydotool` sending Ctrl+V;
+clipboard backend follows the session type: `wl-copy`/`wl-paste` on Wayland and
+`xclip` on X11, so an X11 session uses `xclip` even when wl-clipboard is installed,
+and a Wayland session never picks `xclip`. A session type that is neither Wayland
+nor X11 uses the Wayland backend. `ydotool` sends Ctrl+V;
 `wtype` sends the chord only when `ydotool` is absent.
 
 A terminal window needs Ctrl+Shift+V, so the chord asks the compositor what the
@@ -137,10 +144,10 @@ an image or a file list, for example - cannot be snapshotted, so the transcript
 replaces it permanently. When the clipboard write fails no paste is sent, and when
 the paste fails the transcript stays on the clipboard so you can paste it yourself.
 
-When no clipboard backend is available, or the session is not Wayland, insertion
-falls back to typing the transcript through `ydotool` (or `wtype`) and reports why.
-The daemon prints the chosen insertion strategy on startup, and names the package to
-install when a tool is missing.
+Insertion never types the transcript one character at a time. When the clipboard
+backend for the session or the chord injector is missing, the daemon refuses to start
+and prints the package to install instead of degrading to typing. The daemon prints
+the chosen insertion strategy on startup.
 
 ### Configuration
 
@@ -252,7 +259,7 @@ whisper-anywhere/
 │   ├── state.py         # daemon state and the status socket
 │   ├── tray/            # separate tray process: appearance, socket client, GTK view
 │   ├── transcribe/      # model loading and engine registry
-│   └── insertion/       # clipboard backend, paste chord, clipboard and typing inserters
+│   └── insertion/       # clipboard backend, paste chord, clipboard inserter
 ├── tests/               # pytest suite
 ├── install.sh           # one-shot installer
 ├── uninstall.sh         # reverses install.sh

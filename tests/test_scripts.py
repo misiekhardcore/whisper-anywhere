@@ -351,6 +351,32 @@ class TestInstallUninstall:
         assert "wl-clipboard" in packages
         assert "ydotool" in packages
 
+    def test_install_adds_xclip_on_x11(self, fake_home: Path) -> None:
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh",
+            fake_home,
+            extra_env={"XDG_SESSION_TYPE": "x11", "WAYLAND_DISPLAY": ""},
+        )
+        assert result.returncode == 0, f"install.sh failed:\n{result.stderr}"
+
+        packages: str = (fake_home / "apt.log").read_text()
+        assert "xclip" in packages
+        assert "wl-clipboard" not in packages
+        assert "Insertion: transcript written to the clipboard" in result.stdout
+        assert "xclip backend" in result.stdout
+
+    def test_install_does_not_add_xclip_on_wayland(self, fake_home: Path) -> None:
+        result: subprocess.CompletedProcess = _run(
+            REPO_DIR / "install.sh",
+            fake_home,
+            extra_env={"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0"},
+        )
+        assert result.returncode == 0, f"install.sh failed:\n{result.stderr}"
+
+        packages: str = (fake_home / "apt.log").read_text()
+        assert "wl-clipboard" in packages
+        assert "xclip" not in packages
+
     def test_install_enables_autostart_by_default(self, fake_home: Path) -> None:
         result: subprocess.CompletedProcess = _run(REPO_DIR / "install.sh", fake_home)
         assert result.returncode == 0, f"install.sh failed:\n{result.stderr}"

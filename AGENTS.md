@@ -2,7 +2,7 @@
 
 ## Project overview
 
-Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, release — text appears wherever the cursor is. Uses `sensevoice` via `funasr` for transcription by default (with `faster-whisper` as an alternative engine), `parec` for audio capture, `wl-copy`/`wl-paste` and `ydotool` for clipboard-paste insertion, and `evdev` for keyboard event reading.
+Multi-module Python package for Linux voice dictation. Hold a hotkey, speak, release — text appears wherever the cursor is. Uses `sensevoice` via `funasr` for transcription by default (with `faster-whisper` as an alternative engine), `parec` for audio capture, `wl-copy`/`wl-paste` on Wayland or `xclip` on X11 plus `ydotool` for clipboard-paste insertion, and `evdev` for keyboard event reading.
 
 ## Tests and CI
 
@@ -33,8 +33,8 @@ whisper_anywhere/
 ├── output.py        # async emit() -> inserter
 ├── recording.py     # Recording, Recorder.start(), Recorder.finish()
 ├── transcribe/      # load_engine(), Transcriber protocol, one module per engine
-└── insertion/       # TextInserter, Clipboard/WaylandClipboard, PasteChord,
-                     # CompositorWindowQuery, ClipboardInserter, TypingInserter,
+└── insertion/       # TextInserter, Clipboard/WaylandClipboard/X11Clipboard,
+                     # PasteChord, CompositorWindowQuery, ClipboardInserter,
                      # select_insertion()
 ```
 
@@ -42,9 +42,10 @@ whisper_anywhere/
 
 - `pulseaudio-utils` — provides `parec`
 - `python3-evdev` — provides `evdev` Python module
-- `ydotool` — provides `ydotool` (paste chord and typing fallback)
+- `ydotool` — provides `ydotool` (paste chord)
 - `wl-clipboard` — provides `wl-copy`/`wl-paste` (Wayland clipboard backend, preferred)
-- `wtype` — optional; sends the paste chord and types only when `ydotool` is absent
+- `xclip` — provides `xclip` (X11 clipboard backend, used on an X11 session)
+- `wtype` — optional; sends the paste chord only when `ydotool` is absent
 
 ## Key runtime requirements
 
@@ -66,15 +67,15 @@ whisper_anywhere/
 
 - `find_keyboards()` — scans `/dev/input/` for a keyboard device via evdev, skips ydotoold/lid/power/sleep/video
 - `check_deps(engine, insertion)` — verifies `parec` is on PATH, `evdev` imports, the selected engine's package is importable (`funasr` for SenseVoice only, `faster_whisper`, or `vosk`), and the already-resolved insertion strategy is usable; `main()` resolves that strategy once, so the diagnosis and the running inserter cannot disagree
-- `select_insertion()` — resolves insertion once at startup: clipboard paste when a Wayland clipboard backend and a chord injector exist, otherwise typing; returns the description, an optional warning and the inserter
+- `select_insertion()` — resolves insertion once at startup: clipboard paste when the session's clipboard backend (`wl-clipboard` on Wayland and on an unknown session type, `xclip` on X11) and a chord injector exist; otherwise no inserter, so `check_deps()` stops startup with the install command. Returns the description, an optional warning and the inserter
 - `load_engine(engine_id, model_id, language)` — builds the selected engine from the `register_engine()` registry, defaulting to SenseVoice and `iic/SenseVoiceSmall`
 - `plan_engine()` — resolves engine id and model from CLI, then config, and defers the `load_engine()` call until the daemon has published loading
 - `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
 - `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
 - `Recorder.start()` — spawns `parec --raw` and returns a `Recording` (process, reader task, PCM buffer)
 - `Recorder.finish()` — stops `parec` via `stop_recording()`, drains the remaining audio, writes the WAV, runs the engine once over the whole recording and emits the transcript once. An empty recording, a blank transcript and an engine error all end quietly with a line on stderr.
-- `emit()` — async; delivers text through the resolved `TextInserter` in a worker thread (clipboard write plus one paste chord, or typing), or prints one `{"type": "final", "text": ...}` line in `--stdout` mode. An empty transcript emits nothing.
-- `ClipboardInserter.insert_text()` — writes the transcript with `wl-copy`, then sends one chord via `ydotool` (or `wtype`): Ctrl+V normally, Ctrl+Shift+V when `CompositorWindowQuery.is_terminal()` recognises the focused window as a terminal (`hyprctl`, then `swaymsg`; unknown reads as not a terminal). A failed write sends no chord; a failed chord leaves the transcript on the clipboard. Subprocesses run detached (`stdout=DEVNULL`) because a forked selection owner holding an inherited pipe would otherwise block forever.
+- `emit()` — async; delivers text through the resolved `TextInserter` in a worker thread (clipboard write plus one paste chord), or prints one `{"type": "final", "text": ...}` line in `--stdout` mode. An empty transcript emits nothing.
+- `ClipboardInserter.insert_text()` — writes the transcript with the session's clipboard backend, then sends one chord via `ydotool` (or `wtype`): Ctrl+V normally, Ctrl+Shift+V when `CompositorWindowQuery.is_terminal()` recognises the focused window as a terminal (`hyprctl`, then `swaymsg`; unknown reads as not a terminal). A failed write sends no chord; a failed chord leaves the transcript on the clipboard. Subprocesses run detached (`stdout=DEVNULL`) because a forked selection owner holding an inherited pipe would otherwise block forever.
 - `Daemon.run()` — async evdev read loop; a hotkey press starts a `Recorder.start()`, the matching release calls `Recorder.finish()`. One dictation is one engine call and one emission. Wrapped in a loop that re-acquires the keyboard on hotplug/`OSError`.
 - `read_audio()` caps a single recording at `MAX_RECORDING_SECONDS` (60s) so a stuck hotkey can't run `parec` forever.
 - Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample

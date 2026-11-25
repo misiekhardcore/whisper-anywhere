@@ -166,7 +166,7 @@ class TestStartup:
         inserter: _FakeInserter = _FakeInserter()
         selection: InsertionSelection = InsertionSelection(
             inserter,
-            "typing (ydotool)",
+            "clipboard paste (ydotool + wl-clipboard)",
             "Clipboard insertion unavailable: install wl-clipboard",
         )
 

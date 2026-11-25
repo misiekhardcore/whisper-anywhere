@@ -229,7 +229,7 @@ class TestCheckDepsInsertion:
     ) -> None:
         selection: InsertionSelection = InsertionSelection(
             _FakeInserter(),
-            "typing (ydotool)",
+            "clipboard paste (ydotool + wl-clipboard)",
             "Clipboard insertion unavailable: install it: sudo apt install wl-clipboard",
         )
         with (

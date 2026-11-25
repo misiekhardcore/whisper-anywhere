@@ -9,9 +9,9 @@ from whisper_anywhere.insertion import (
     ChordError,
     ClipboardError,
     ClipboardInserter,
-    TypingInserter,
     WaylandClipboard,
     WtypeChord,
+    X11Clipboard,
     YdotoolChord,
     select_insertion,
 )
@@ -365,6 +365,93 @@ class TestWaylandClipboard:
             assert call.kwargs["stderr"] is subprocess.DEVNULL
 
 
+class TestX11Clipboard:
+    def test_write_pipes_text_to_xclip(self) -> None:
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            X11Clipboard().write("hello")
+
+        call = run.call_args
+        assert call.args[0] == ["xclip", "-selection", "clipboard", "-i"]
+        assert call.kwargs["input"] == "hello"
+
+    def test_write_does_not_inherit_standard_streams(self) -> None:
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            X11Clipboard().write("hello")
+
+        kwargs = run.call_args.kwargs
+        assert kwargs["stdout"] is subprocess.DEVNULL
+        assert kwargs["stderr"] is subprocess.DEVNULL
+
+    def test_read_returns_text(self) -> None:
+        with patch("subprocess.run") as run:
+            run.side_effect = [
+                MagicMock(returncode=0, stdout="TARGETS\nUTF8_STRING\n"),
+                MagicMock(returncode=0, stdout="hello"),
+            ]
+            content = X11Clipboard().read()
+
+        assert content.text == "hello"
+        assert run.call_args_list[0].args[0] == [
+            "xclip",
+            "-selection",
+            "clipboard",
+            "-t",
+            "TARGETS",
+            "-o",
+        ]
+        assert run.call_args_list[1].args[0] == [
+            "xclip",
+            "-selection",
+            "clipboard",
+            "-o",
+        ]
+
+    def test_read_non_text_is_not_text(self) -> None:
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0, stdout="TARGETS\nimage/png\n")
+            content = X11Clipboard().read()
+
+        assert content.text is None
+        assert run.call_count == 1
+
+    def test_read_empty_clipboard_is_not_text(self) -> None:
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(returncode=1, stdout="")
+            content = X11Clipboard().read()
+
+        assert content.text is None
+
+    def test_read_failure_is_not_text(self) -> None:
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            content = X11Clipboard().read()
+
+        assert content.text is None
+
+    def test_read_does_not_inherit_standard_streams(self) -> None:
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0, stdout="")
+            X11Clipboard().read()
+
+        for call in run.call_args_list:
+            assert call.kwargs["stdin"] is subprocess.DEVNULL
+            assert call.kwargs["stderr"] is subprocess.DEVNULL
+
+    def test_write_missing_tool_names_package(self) -> None:
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            with pytest.raises(ClipboardError) as exc:
+                X11Clipboard().write("hello")
+
+        assert "sudo apt install xclip" in str(exc.value)
+
+    def test_write_failure_raises(self) -> None:
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(returncode=1)
+            with pytest.raises(ClipboardError):
+                X11Clipboard().write("hello")
+
+
 class TestChords:
     def test_ydotool_sends_one_ctrl_v(self) -> None:
         with patch("subprocess.run") as run:
@@ -419,53 +506,6 @@ class TestChords:
                 WtypeChord().send()
 
 
-class TestTypingInserter:
-    def test_ydotool_types_the_transcript(self) -> None:
-        with patch("subprocess.run") as run:
-            run.return_value = MagicMock(returncode=0)
-            delivered = TypingInserter("ydotool").insert_text("hello")
-
-        assert delivered is True
-        call = run.call_args
-        assert call.args[0] == ["ydotool", "type", "hello"]
-        assert call.kwargs["stdout"] is subprocess.DEVNULL
-        assert call.kwargs["stderr"] is subprocess.DEVNULL
-
-    def test_wtype_types_the_transcript(self) -> None:
-        with patch("subprocess.run") as run:
-            run.return_value = MagicMock(returncode=0)
-            delivered = TypingInserter("wtype").insert_text("zażółć")
-
-        assert delivered is True
-        assert run.call_args.args[0] == ["wtype", "zażółć"]
-
-    def test_empty_text_types_nothing(self) -> None:
-        with patch("subprocess.run") as run:
-            delivered = TypingInserter("ydotool").insert_text("")
-
-        assert delivered is False
-        run.assert_not_called()
-
-    def test_ydotool_failure_reports(self, capsys: pytest.CaptureFixture[str]) -> None:
-        with patch("subprocess.run") as run:
-            run.return_value = MagicMock(returncode=1)
-            delivered = TypingInserter("ydotool").insert_text("hello")
-
-        assert delivered is False
-        assert "ydotool type failed" in capsys.readouterr().err
-
-    def test_missing_tool_reports_package(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        with patch("subprocess.run", side_effect=FileNotFoundError):
-            delivered = TypingInserter("wtype").insert_text("hello")
-
-        assert delivered is False
-        err: str = capsys.readouterr().err
-        assert "wtype not found" in err
-        assert "sudo apt install wtype" in err
-
-
 class TestSelectInsertion:
     def test_wayland_with_all_tools_prefers_clipboard(self) -> None:
         selection = select_insertion(
@@ -477,12 +517,11 @@ class TestSelectInsertion:
         assert selection.warning is None
         assert "clipboard paste" in selection.description
 
-    def test_missing_clipboard_falls_back_to_typing_and_explains(self) -> None:
+    def test_missing_wl_clipboard_inserts_nothing_and_names_the_package(self) -> None:
         selection = select_insertion(which=_which("ydotool"), session_type="wayland")
 
-        assert isinstance(selection.inserter, TypingInserter)
-        assert selection.warning is not None
-        assert "sudo apt install wl-clipboard" in selection.warning
+        assert selection.inserter is None
+        assert "sudo apt install wl-clipboard" in selection.description
 
     def test_clipboard_chord_uses_wtype_when_ydotool_absent(self) -> None:
         selection = select_insertion(
@@ -493,7 +532,7 @@ class TestSelectInsertion:
         assert isinstance(selection.inserter, ClipboardInserter)
         with patch("subprocess.run") as run:
             run.side_effect = [
-                MagicMock(returncode=0, stdout="image/png\n"),
+                MagicMock(returncode=0, stdout="TARGETS\nimage/png\n"),
                 MagicMock(returncode=0),
                 MagicMock(returncode=0, stdout='{"class": "firefox", "title": ""}'),
                 MagicMock(returncode=0),
@@ -512,7 +551,7 @@ class TestSelectInsertion:
         assert isinstance(selection.inserter, ClipboardInserter)
         with patch("subprocess.run") as run:
             run.side_effect = [
-                MagicMock(returncode=0, stdout="image/png\n"),
+                MagicMock(returncode=0, stdout="TARGETS\nimage/png\n"),
                 MagicMock(returncode=0),
                 MagicMock(
                     returncode=0, stdout='{"class": "kitty", "title": "~/Projects"}'
@@ -532,18 +571,127 @@ class TestSelectInsertion:
         assert selection.inserter is None
         assert "sudo apt install ydotool" in selection.description
 
-    def test_x11_session_uses_typing(self) -> None:
+    def test_x11_session_with_xclip_prefers_clipboard(self) -> None:
         selection = select_insertion(
-            which=_which("wl-copy", "wl-paste", "ydotool"),
+            which=_which("xclip", "wl-copy", "wl-paste", "ydotool"),
             session_type="x11",
         )
 
-        assert isinstance(selection.inserter, TypingInserter)
-        assert selection.warning is not None
-        assert "Wayland session" in selection.warning
+        assert isinstance(selection.inserter, ClipboardInserter)
+        assert selection.warning is None
+        assert "xclip" in selection.description
 
-    def test_unknown_session_uses_typing(self) -> None:
+    def test_unknown_session_without_clipboard_tools_names_the_wayland_package(
+        self,
+    ) -> None:
         selection = select_insertion(which=_which("ydotool"), session_type="")
 
-        assert isinstance(selection.inserter, TypingInserter)
-        assert selection.description == "typing (ydotool)"
+        assert selection.inserter is None
+        assert "sudo apt install wl-clipboard" in selection.description
+
+    def test_wayland_session_ignores_an_installed_xclip(self) -> None:
+        selection = select_insertion(
+            which=_which("xclip", "wl-copy", "wl-paste", "ydotool"),
+            session_type="wayland",
+        )
+
+        assert isinstance(selection.inserter, ClipboardInserter)
+        assert "wl-clipboard" in selection.description
+
+    def test_missing_xclip_on_x11_inserts_nothing_and_names_the_package(self) -> None:
+        selection = select_insertion(
+            which=_which("wl-copy", "wl-paste", "ydotool"), session_type="x11"
+        )
+
+        assert selection.inserter is None
+        assert "sudo apt install xclip" in selection.description
+
+    def test_unknown_session_falls_back_to_the_wayland_backend(self) -> None:
+        selection = select_insertion(
+            which=_which("xclip", "wl-copy", "wl-paste", "ydotool"),
+            session_type="tty",
+        )
+
+        assert isinstance(selection.inserter, ClipboardInserter)
+        assert "wl-clipboard" in selection.description
+
+    def test_x11_restores_the_previous_clipboard_text(self) -> None:
+        selection = select_insertion(
+            which=_which("xclip", "ydotool"), session_type="x11"
+        )
+
+        assert isinstance(selection.inserter, ClipboardInserter)
+        with patch("subprocess.run") as run:
+            run.side_effect = [
+                MagicMock(returncode=0, stdout="TARGETS\nUTF8_STRING\n"),
+                MagicMock(returncode=0, stdout="previous"),
+                MagicMock(returncode=0),
+                MagicMock(returncode=0, stdout='{"class": "firefox", "title": ""}'),
+                MagicMock(returncode=0),
+                MagicMock(returncode=0, stdout="TARGETS\nUTF8_STRING\n"),
+                MagicMock(returncode=0, stdout="hello"),
+                MagicMock(returncode=0),
+            ]
+            selection.inserter.insert_text("hello")
+
+        commands: list[list[str]] = [call.args[0] for call in run.call_args_list]
+        writes: list[list[str]] = [
+            call.args[0]
+            for call in run.call_args_list
+            if call.args[0] == ["xclip", "-selection", "clipboard", "-i"]
+        ]
+        chords: list[list[str]] = [
+            call.args[0] for call in run.call_args_list if call.args[0][0] == "ydotool"
+        ]
+        assert len(writes) == 2
+        assert commands.count(["xclip", "-selection", "clipboard", "-i"]) == 2
+        assert run.call_args_list[2].kwargs["input"] == "hello"
+        assert run.call_args_list[7].kwargs["input"] == "previous"
+        assert chords == [["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]]
+
+    def test_x11_changed_clipboard_is_not_restored(self) -> None:
+        selection = select_insertion(
+            which=_which("xclip", "ydotool"), session_type="x11"
+        )
+
+        assert isinstance(selection.inserter, ClipboardInserter)
+        with patch("subprocess.run") as run:
+            run.side_effect = [
+                MagicMock(returncode=0, stdout="TARGETS\nUTF8_STRING\n"),
+                MagicMock(returncode=0, stdout="previous"),
+                MagicMock(returncode=0),
+                MagicMock(returncode=0, stdout='{"class": "firefox", "title": ""}'),
+                MagicMock(returncode=0),
+                MagicMock(returncode=0, stdout="TARGETS\nUTF8_STRING\n"),
+                MagicMock(returncode=0, stdout="something else"),
+            ]
+            selection.inserter.insert_text("hello")
+
+        writes: list[list[str]] = [
+            call.args[0]
+            for call in run.call_args_list
+            if call.args[0] == ["xclip", "-selection", "clipboard", "-i"]
+        ]
+        assert len(writes) == 1
+
+    def test_x11_non_text_clipboard_is_overwritten_without_restore(self) -> None:
+        selection = select_insertion(
+            which=_which("xclip", "ydotool"), session_type="x11"
+        )
+
+        assert isinstance(selection.inserter, ClipboardInserter)
+        with patch("subprocess.run") as run:
+            run.side_effect = [
+                MagicMock(returncode=0, stdout="TARGETS\nimage/png\n"),
+                MagicMock(returncode=0),
+                MagicMock(returncode=0, stdout='{"class": "firefox", "title": ""}'),
+                MagicMock(returncode=0),
+            ]
+            selection.inserter.insert_text("hello")
+
+        writes: list[str] = [
+            call.kwargs["input"]
+            for call in run.call_args_list
+            if call.args[0] == ["xclip", "-selection", "clipboard", "-i"]
+        ]
+        assert writes == ["hello"]
