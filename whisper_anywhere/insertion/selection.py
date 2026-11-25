@@ -59,7 +59,9 @@ def select_insertion(
         if which("xclip"):
             return _clipboard_selection(X11Clipboard(), "xclip", chord)
         return InsertionSelection(
-            None, f"Clipboard insertion unavailable: xclip not found — {XCLIP_INSTALL}", None
+            None,
+            f"Clipboard insertion unavailable: xclip not found — {XCLIP_INSTALL}",
+            None,
         )
 
     # Wayland is the documented backend for every other session type.

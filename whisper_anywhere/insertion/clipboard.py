@@ -51,6 +51,7 @@ class WaylandClipboard(Clipboard):
         if result.returncode != 0:
             raise ClipboardError(f"wl-copy failed (exit {result.returncode})")
 
+
 class X11Clipboard(Clipboard):
     """`xclip` on the CLIPBOARD selection, the X11 backend."""
 
@@ -83,9 +84,7 @@ _TEXT_TARGETS: frozenset[str] = frozenset({"UTF8_STRING", "STRING", "TEXT"})
 def _offers_text(targets: str) -> bool:
     """True when the advertised selection targets include a text flavour."""
     names: set[str] = {name.strip() for name in targets.splitlines() if name.strip()}
-    return any(
-        name in _TEXT_TARGETS or name.startswith("text/") for name in names
-    )
+    return any(name in _TEXT_TARGETS or name.startswith("text/") for name in names)
 
 
 def _read_detached(command: list[str]) -> str | None:
