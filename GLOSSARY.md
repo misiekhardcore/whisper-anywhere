@@ -11,16 +11,14 @@ focused application, and the tray only observes the daemon.
   16 kHz mono s16le PCM and written to a WAV file only for transcription.
 - **Transcript** - the text the engine returns for a recording. It is final: the
   daemon never revises text after insertion.
-- **Insertion** - delivering a transcript to the focused application. Two kinds
-  exist: clipboard insertion and typing insertion.
+- **Insertion** - delivering a transcript to the focused application. It is always
+  a clipboard insertion: the transcript is never typed character by character.
 - **Clipboard insertion** - writing the transcript to the system clipboard and
   sending a paste chord. The preferred path, chosen once at startup.
-- **Clipboard backend** - the tool that reads and writes the clipboard. On a Wayland
-  session the backend is `wl-copy`/`wl-paste` from wl-clipboard.
+- **Clipboard backend** - the tool that reads and writes the clipboard, chosen by
+  session type: `wl-copy`/`wl-paste` from wl-clipboard on Wayland, `xclip` on X11.
 - **Chord injector** - the tool that sends the paste chord: `ydotool`, or `wtype`
   when `ydotool` is absent.
-- **Typing insertion** - injecting one key event per character through `ydotool`
-  or `wtype`. Fallback used only when clipboard insertion is unavailable.
 - **Paste chord** - the key combination that pastes: Ctrl+V, or Ctrl+Shift+V when
   the focused window is a terminal.
 - **Focused-window query** - the best-effort `hyprctl` / `swaymsg` question that

@@ -33,8 +33,11 @@ jobs:
         with:
           python-version: "${{ matrix.python-version }}"
 
-      - name: Install evdev
-        run: pip install evdev
+      - name: Install test system packages and evdev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xclip
+          pip install evdev
 
       - name: Install dev environment
         run: make dev-setup

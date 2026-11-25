@@ -141,6 +141,11 @@ step_system_packages() {
     local wanted=("${SYSTEM_PACKAGES[@]}") missing=() pkg
     if [ -n "${WAYLAND_DISPLAY:-}" ]; then
         wanted+=(wl-clipboard)
+    elif [ "${XDG_SESSION_TYPE:-}" = "x11" ]; then
+        wanted+=(xclip)
+    else
+        # The daemon uses the Wayland backend when the session type is unknown.
+        wanted+=(wl-clipboard)
     fi
     for pkg in "${wanted[@]}"; do
         package_installed "$pkg" || missing+=("$pkg")
@@ -153,6 +158,8 @@ step_system_packages() {
     pkg_install "${missing[@]}"
     if [ -n "${WAYLAND_DISPLAY:-}" ]; then
         info "Wayland detected — the clipboard backend (wl-clipboard) is included"
+    elif [ "${XDG_SESSION_TYPE:-}" = "x11" ]; then
+        info "X11 detected — the clipboard backend (xclip) is included"
     fi
 }
 
@@ -435,11 +442,12 @@ summary() {
         echo "           (or set hotkey=KEY_F12 in $CONFIG_DIR/config)"
     fi
     echo ""
-    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    if [ "${XDG_SESSION_TYPE:-}" = "x11" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+        echo "  Insertion: transcript written to the clipboard, one Ctrl+V paste chord"
+        echo "    (xclip backend, ydotool chord injector)"
+    else
         echo "  Insertion: transcript written to the clipboard, one Ctrl+V paste chord"
         echo "    (wl-clipboard backend, ydotool chord injector)"
-    else
-        echo "  Insertion: typing through ydotool (no clipboard backend on this session)"
     fi
     echo ""
     if [ "$start_at_login" = "1" ]; then

@@ -5,14 +5,20 @@ from dataclasses import dataclass
 
 from .base import TextInserter
 from .chord import PasteChord, WtypeChord, YdotoolChord
-from .clipboard import WL_CLIPBOARD_INSTALL, WaylandClipboard
+from .clipboard import (
+    WL_CLIPBOARD_INSTALL,
+    XCLIP_INSTALL,
+    Clipboard,
+    WaylandClipboard,
+    X11Clipboard,
+)
 from .clipboard_inserter import ClipboardInserter
 from .focused_window import CompositorWindowQuery
-from .typing import TypingInserter
 
 Which = Callable[[str], str | None]
 
 WAYLAND_SESSION = "wayland"
+X11_SESSION = "x11"
 MISSING_TOOL_MESSAGE = (
     "No insertion tool found — install ydotool (sudo apt install ydotool) "
     "or wtype (sudo apt install wtype)"
@@ -49,19 +55,31 @@ def select_insertion(
     else:
         return InsertionSelection(None, MISSING_TOOL_MESSAGE, None)
 
-    if session != WAYLAND_SESSION:
-        clipboard_problem: str = "the Wayland clipboard backend needs a Wayland session"
-    elif not which("wl-copy") or not which("wl-paste"):
-        clipboard_problem = f"wl-copy/wl-paste not found — {WL_CLIPBOARD_INSTALL}"
-    else:
+    if session == X11_SESSION:
+        if which("xclip"):
+            return _clipboard_selection(X11Clipboard(), "xclip", chord)
         return InsertionSelection(
-            ClipboardInserter(WaylandClipboard(), chord, CompositorWindowQuery()),
-            f"clipboard paste ({chord.TOOL} + wl-clipboard)",
+            None,
+            f"Clipboard insertion unavailable: xclip not found — {XCLIP_INSTALL}",
             None,
         )
+
+    # Wayland is the documented backend for every other session type.
+    if which("wl-copy") and which("wl-paste"):
+        return _clipboard_selection(WaylandClipboard(), "wl-clipboard", chord)
     return InsertionSelection(
-        TypingInserter(chord.TOOL),
-        f"typing ({chord.TOOL})",
-        f"Clipboard insertion unavailable: {clipboard_problem}. "
-        "Falling back to typing insertion.",
+        None,
+        "Clipboard insertion unavailable: wl-copy/wl-paste not found — "
+        f"{WL_CLIPBOARD_INSTALL}",
+        None,
+    )
+
+
+def _clipboard_selection(
+    clipboard: Clipboard, backend: str, chord: PasteChord
+) -> InsertionSelection:
+    return InsertionSelection(
+        ClipboardInserter(clipboard, chord, CompositorWindowQuery()),
+        f"clipboard paste ({chord.TOOL} + {backend})",
+        None,
     )

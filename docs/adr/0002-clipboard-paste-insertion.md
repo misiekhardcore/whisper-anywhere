@@ -1,6 +1,6 @@
 # ADR 0002 - Insert transcripts through the clipboard and a paste chord
 
-- Status: accepted, not yet implemented
+- Status: accepted, implemented
 - Date: 2026-11-22
 
 ## Context
@@ -13,12 +13,18 @@ handle that stream inconsistently, and slow injection looks like dropped input.
 ## Decision
 
 Insertion writes the transcript to the system clipboard and sends one paste chord.
-The clipboard path is preferred; character typing through `ydotool` or `wtype`
-remains only as a fallback when no clipboard tool or no chord injector is available.
+It is the only insertion mechanism: character typing one key event per character is
+gone, so a session without a clipboard backend or without a chord injector gets an
+actionable install message at startup instead of a degraded typed insertion.
 
 Rules:
 
 - Clipboard backends: `wl-copy`/`wl-paste` under a Wayland session, `xclip` under X11.
+  The backend is chosen by session type, never by which tool is first on `PATH`, and
+  a session type that is neither gets the Wayland backend.
+- A clipboard read asks the backend what flavours the selection offers and reports
+  no text unless one of them is text (`wl-paste --list-types` on Wayland,
+  `xclip -t TARGETS -o` on X11).
 - Paste chord: `ydotool key` with Ctrl+V, or Ctrl+Shift+V in a terminal window.
   `wtype` provides the chord only when `ydotool` is absent.
 - The focused window's terminal-ness is detected through `hyprctl` or `swaymsg`.
@@ -38,6 +44,8 @@ Rules:
   must become async and run the inserter in a worker thread to keep the evdev loop
   responsive.
 - Clipboard restoration is best effort: an image or file on the clipboard is replaced.
+- Typing insertion and the code that drove it are removed; a machine missing the
+  clipboard backend or chord injector inserts nothing until the package is installed.
 - Terminal-aware pasting is blind on GNOME and KDE, which expose no focused-window
   query; those users get Ctrl+V.
 
