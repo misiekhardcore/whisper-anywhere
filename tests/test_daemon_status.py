@@ -77,7 +77,7 @@ class _RecordingStarter:
     def __init__(self, process: _FakeProcess) -> None:
         self._process = process
 
-    async def __call__(self, max_seconds: float) -> Recording:
+    async def __call__(self) -> Recording:
         return Recording(
             process=self._process,
             reader=asyncio.create_task(asyncio.sleep(0)),

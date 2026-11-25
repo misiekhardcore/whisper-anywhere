@@ -1,4 +1,3 @@
-import asyncio
 import struct
 import tempfile
 from pathlib import Path
@@ -120,32 +119,16 @@ async def test_read_audio_large_chunks() -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_audio_signals_the_cap_and_drains_the_flush() -> None:
-    cap_reached: asyncio.Event = asyncio.Event()
+async def test_read_audio_keeps_every_chunk_of_a_long_stream() -> None:
+    chunk: bytes = b"x" * 4096
     proc: AsyncMock = AsyncMock()
-    proc.send_signal = MagicMock()
-    proc.stdout.read.side_effect = [b"xxxx", b"xxxx", b"xxxx", b""]
+    # ~3.3 MB, well past the old 60 s cap, must all be kept.
+    proc.stdout.read.side_effect = [chunk] * 800 + [b""]
     buffer: bytearray = bytearray()
 
-    await read_audio(proc, buffer, max_bytes=8, cap_reached=cap_reached)
+    await read_audio(proc, buffer)
 
-    proc.send_signal.assert_called_once()
-    assert cap_reached.is_set()
-    # parec is stopped at the cap, but its flushed tail is still drained.
-    assert len(buffer) == 12
-
-
-@pytest.mark.asyncio
-async def test_read_audio_does_not_signal_the_cap_below_the_limit() -> None:
-    cap_reached: asyncio.Event = asyncio.Event()
-    proc: AsyncMock = AsyncMock()
-    proc.stdout.read.side_effect = [b"xxxx", b""]
-    buffer: bytearray = bytearray()
-
-    await read_audio(proc, buffer, max_bytes=8, cap_reached=cap_reached)
-
-    assert not cap_reached.is_set()
-    assert bytes(buffer) == b"xxxx"
+    assert len(buffer) == 4096 * 800
 
 
 def test_stop_recording_ignores_dead_process() -> None:

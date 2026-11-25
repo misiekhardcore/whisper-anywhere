@@ -4,12 +4,10 @@ import sys
 from .audio import (
     AUDIO,
     CHANNELS,
-    DEFAULT_MAX_RECORDING_SECONDS,
     PAREC_FORMAT,
     PAREC_LATENCY_MS,
     SAMPLE_RATE,
     read_audio,
-    recording_bytes,
     stop_recording,
     write_wav,
 )
@@ -27,12 +25,10 @@ class Recording:
         process: asyncio.subprocess.Process | None,
         reader: asyncio.Task,
         buffer: bytearray,
-        cap_reached: asyncio.Event | None = None,
     ) -> None:
         self.process = process
         self.reader = reader
         self.buffer = buffer
-        self.cap_reached = cap_reached or asyncio.Event()
 
 
 class Recorder:
@@ -49,11 +45,8 @@ class Recorder:
         self._status = status or NullStatus()
 
     @staticmethod
-    async def start(
-        max_seconds: float = DEFAULT_MAX_RECORDING_SECONDS,
-    ) -> Recording:
+    async def start() -> Recording:
         buffer = bytearray()
-        cap_reached = asyncio.Event()
         process = await asyncio.create_subprocess_exec(
             "parec",
             f"--format={PAREC_FORMAT}",
@@ -64,17 +57,10 @@ class Recorder:
             stdout=asyncio.subprocess.PIPE,
             stderr=sys.stderr,
         )
-        reader = asyncio.create_task(
-            read_audio(
-                process,
-                buffer,
-                max_bytes=recording_bytes(max_seconds),
-                cap_reached=cap_reached,
-            )
-        )
-        return Recording(process, reader, buffer, cap_reached)
+        reader = asyncio.create_task(read_audio(process, buffer))
+        return Recording(process, reader, buffer)
 
-    async def finish(self, recording: Recording, note: str | None = None) -> None:
+    async def finish(self, recording: Recording) -> None:
         """Stop capture, transcribe the recording in segments and emit once."""
         stop_recording(recording.process)
         await recording.reader
@@ -94,7 +80,7 @@ class Recorder:
             self._status.publish(DaemonState.IDLE)
             return
         # The transcript exists, so processing is over before anything is inserted.
-        self._status.publish(DaemonState.IDLE, note)
+        self._status.publish(DaemonState.IDLE)
         if not await self._output.emit(text):
             self._status.publish(DaemonState.IDLE, FAILURE_NOTE)
 

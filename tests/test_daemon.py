@@ -6,37 +6,27 @@ from evdev import ecodes
 
 import whisper_anywhere.daemon as daemon_module
 from tests.helpers import _FakeDevice, _key_event
-from whisper_anywhere.audio import DEFAULT_MAX_RECORDING_SECONDS
 from whisper_anywhere.daemon import Daemon
 from whisper_anywhere.output import TextOutput
 from whisper_anywhere.recording import Recording
-from whisper_anywhere.state import LIMIT_NOTE, NullStatus
+from whisper_anywhere.state import NullStatus
 
 
 class _RecorderCalls:
-    def __init__(self, capped: bool = False) -> None:
+    def __init__(self) -> None:
         self.starts: int = 0
         self.finished: list[Recording] = []
-        self.max_seconds: list[float] = []
-        self.notes: list[str | None] = []
-        self._capped = capped
 
-    async def start(self, max_seconds: float) -> Recording:
+    async def start(self) -> Recording:
         self.starts += 1
-        self.max_seconds.append(max_seconds)
-        cap_reached: asyncio.Event = asyncio.Event()
-        if self._capped:
-            cap_reached.set()
         return Recording(
             process="parec",
             reader=asyncio.create_task(asyncio.sleep(0)),
             buffer=bytearray(b"pcm"),
-            cap_reached=cap_reached,
         )
 
-    async def finish(self, recording: Recording, note: str | None = None) -> None:
+    async def finish(self, recording: Recording) -> None:
         self.finished.append(recording)
-        self.notes.append(note)
 
 
 def _combo_press_and_release() -> list:
@@ -52,20 +42,10 @@ def _single_key_press_and_release(code: int) -> list:
     return [_key_event(code, 1), _key_event(code, 0)]
 
 
-def _drive(
-    events: list,
-    hotkey_code: int | None,
-    calls: _RecorderCalls,
-    max_recording_seconds: float | None = None,
-) -> None:
+def _drive(events: list, hotkey_code: int | None, calls: _RecorderCalls) -> None:
     async def scenario() -> None:
         daemon: Daemon = Daemon(
-            hotkey_code,
-            lambda: None,
-            TextOutput(False),
-            None,
-            NullStatus(),
-            *([max_recording_seconds] if max_recording_seconds is not None else []),
+            hotkey_code, lambda: None, TextOutput(False), None, NullStatus()
         )
         task: asyncio.Task = asyncio.create_task(daemon.run())
         await asyncio.sleep(0.1)
@@ -155,19 +135,6 @@ class TestDictationCycle:
 
         assert calls.starts == 1
         assert len(calls.finished) == 1
-        assert calls.max_seconds == [DEFAULT_MAX_RECORDING_SECONDS]
-
-    def test_the_configured_limit_reaches_the_recorder(self) -> None:
-        calls: _RecorderCalls = _RecorderCalls()
-
-        _drive(
-            _single_key_press_and_release(ecodes.KEY_F12),
-            ecodes.KEY_F12,
-            calls,
-            max_recording_seconds=12,
-        )
-
-        assert calls.max_seconds == [12]
 
     def test_other_single_keys_are_ignored(self) -> None:
         calls: _RecorderCalls = _RecorderCalls()
@@ -200,24 +167,6 @@ class TestDictationCycle:
 
         assert calls.starts == 0
         assert calls.finished == []
-
-
-class TestRecordingLimit:
-    def test_the_cap_finalizes_the_dictation_without_a_release(self) -> None:
-        calls: _RecorderCalls = _RecorderCalls(capped=True)
-
-        _drive(_single_key_press_and_release(ecodes.KEY_F12)[:1], ecodes.KEY_F12, calls)
-
-        assert calls.starts == 1
-        assert len(calls.finished) == 1
-        assert calls.notes == [LIMIT_NOTE]
-
-    def test_a_release_after_the_cap_finishes_nothing_more(self) -> None:
-        calls: _RecorderCalls = _RecorderCalls(capped=True)
-
-        _drive(_single_key_press_and_release(ecodes.KEY_F12), ecodes.KEY_F12, calls)
-
-        assert len(calls.finished) == 1
 
 
 class TestKeyboardHotplug:

@@ -4,11 +4,11 @@ from typing import Callable
 
 from evdev import InputEvent, ecodes
 
-from .audio import DEFAULT_MAX_RECORDING_SECONDS, stop_recording
+from .audio import stop_recording
 from .keyboard import Keyboard
 from .output import TextOutput
 from .recording import Recorder, Recording
-from .state import LIMIT_NOTE, DaemonState, StatusChannel, StatusServer
+from .state import DaemonState, StatusChannel, StatusServer
 from .transcribe import Transcriber
 
 KEYBOARD_SCAN_DELAY_S = 2
@@ -16,7 +16,6 @@ KEYBOARD_RECONNECT_DELAY_S = 1
 RECORDING_RELEASE_TIMEOUT_S = 2
 
 _RESCAN = object()
-_CAP_REACHED = object()
 
 
 class Daemon:
@@ -27,14 +26,12 @@ class Daemon:
         output: TextOutput,
         language: str | None,
         status: StatusChannel | None = None,
-        max_recording_seconds: float = DEFAULT_MAX_RECORDING_SECONDS,
     ) -> None:
         self._hotkey_code = hotkey_code
         self._load_engine = load_engine
         self._output = output
         self._language = language
         self._status = status or StatusServer()
-        self._max_recording_seconds = max_recording_seconds
 
     async def run(self) -> None:
         asyncio.get_running_loop().set_exception_handler(
@@ -72,13 +69,9 @@ class Daemon:
             recording: Recording | None = None
             try:
                 while not self._status.quit_requested.is_set():
-                    event = await self._next_event(queue, recording)
+                    event = await self._next_event(queue)
                     if event is None:
                         break
-                    if event is _CAP_REACHED:
-                        await recorder.finish(recording, LIMIT_NOTE)
-                        recording = None
-                        continue
                     if event.type != ecodes.EV_KEY:
                         continue
 
@@ -86,9 +79,7 @@ class Daemon:
                         starts: bool = self._press_starts_dictation(event, held)
                         if starts and recording is None:
                             self._status.publish(DaemonState.RECORDING)
-                            recording = await Recorder.start(
-                                self._max_recording_seconds
-                            )
+                            recording = await Recorder.start()
                     elif event.value == 0:
                         ends: bool = self._release_ends_dictation(event, held)
                         if ends and recording is not None:
@@ -103,25 +94,18 @@ class Daemon:
                 if not self._status.quit_requested.is_set():
                     await asyncio.sleep(KEYBOARD_RECONNECT_DELAY_S)
 
-    async def _next_event(
-        self, queue: asyncio.Queue, recording: Recording | None = None
-    ) -> object | None:
-        """Return the next keyboard event, the cap signal, or None on quit."""
+    async def _next_event(self, queue: asyncio.Queue) -> object | None:
+        """Return the next keyboard event, or None once quit is requested."""
         event_task = asyncio.create_task(queue.get())
         quit_task = asyncio.create_task(self._status.quit_requested.wait())
-        waits: set[asyncio.Task] = {event_task, quit_task}
-        cap_task: asyncio.Task | None = None
-        if recording is not None:
-            cap_task = asyncio.create_task(recording.cap_reached.wait())
-            waits.add(cap_task)
-        done, pending = await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(
+            {event_task, quit_task}, return_when=asyncio.FIRST_COMPLETED
+        )
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
         if quit_task in done:
             return None
-        if cap_task is not None and cap_task in done:
-            return _CAP_REACHED
         return event_task.result()
 
     async def _wait_or_quit(self, seconds: float) -> None:

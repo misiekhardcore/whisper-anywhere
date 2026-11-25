@@ -18,10 +18,8 @@ A dictation produces at most one transcript, and the daemon never revises text a
 it has been inserted. An empty hold, or a hold the engine hears as silence, produces
 no text. A hold longer than 30 seconds is decoded in segments cut at the quietest
 moment near each boundary, and the segments' transcripts are joined into that single
-insertion, so a long dictation is never cut off mid-speech. A single hold is capped
-at 300 seconds by default (`--max-recording` or `max_recording_seconds=`), and a
-recording that reaches the cap is transcribed and inserted right away with a
-"Recording limit reached" note in the tray.
+insertion, so a long dictation is never cut off mid-speech. There is no limit on how
+long a hold may be: recording continues until the hotkey is released.
 
 ## Requirements
 
@@ -174,10 +172,6 @@ hotkey=KEY_F12
 # only zh, en, yue, ja, ko — other codes are ignored (auto-detected).
 # With faster-whisper, any ISO 639-1 code works.
 # language=en
-
-# Longest single hold in seconds (default: 300). A recording that reaches
-# the limit is transcribed immediately instead of dropping the rest.
-# max_recording_seconds=300
 ```
 
 A configuration file written for an older release may still contain keys this version
@@ -193,7 +187,6 @@ whisper-anywhere --engine vosk
 whisper-anywhere --model vosk-model-small-en-us-0.15
 whisper-anywhere --model distil-small.en
 whisper-anywhere --language en          # force language (SenseVoice: zh/en/yue/ja/ko; faster-whisper: any ISO 639-1; Vosk: any ISO 639-1)
-whisper-anywhere --max-recording 600    # longest single hold in seconds (default: 300)
 whisper-anywhere --stdout               # JSON lines output (for opencode plugin)
 ```
 

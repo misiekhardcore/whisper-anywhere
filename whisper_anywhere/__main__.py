@@ -7,7 +7,6 @@ from typing import Callable
 
 from evdev import ecodes
 
-from .audio import DEFAULT_MAX_RECORDING_SECONDS
 from .config import Config
 from .daemon import Daemon
 from .insertion import InsertionSelection, select_insertion
@@ -35,32 +34,6 @@ class EngineSetup:
     load: Callable[[], Transcriber]
 
 
-def resolve_max_recording(cfg: dict, args: Namespace) -> float:
-    """CLI --max-recording > config max_recording_seconds > 300 seconds."""
-    raw = (
-        args.max_recording
-        if args.max_recording is not None
-        else cfg.get("max_recording_seconds")
-    )
-    if raw is None:
-        return DEFAULT_MAX_RECORDING_SECONDS
-    try:
-        seconds = float(raw)
-    except (TypeError, ValueError):
-        print(
-            f"Invalid max_recording_seconds: {raw!r}. Use a number of seconds.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    if seconds <= 0:
-        print(
-            f"Invalid max_recording_seconds: {raw!r}. Use a positive number of seconds.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return seconds
-
-
 def plan_engine(
     cfg: dict,
     args: Namespace,
@@ -86,20 +59,13 @@ def main():
     stdout_mode: bool = args.stdout or cfg.get("stdout") in ("1", "true", "yes")
 
     hotkey_code = load_hotkey(cfg, args)
-    max_recording_seconds = resolve_max_recording(cfg, args)
     language = args.language or cfg.get("language")
     selection: InsertionSelection | None = None if stdout_mode else select_insertion()
     setup = plan_engine(cfg, args, language, selection)
 
     output = TextOutput(stdout_mode, selection.inserter if selection else None)
     insertion: str = "stdout" if stdout_mode else selection.description
-    daemon = Daemon(
-        hotkey_code,
-        setup.load,
-        output,
-        language,
-        max_recording_seconds=max_recording_seconds,
-    )
+    daemon = Daemon(hotkey_code, setup.load, output, language)
 
     lang_str = language or "auto-detect"
     print(

@@ -15,9 +15,6 @@ STATUS_SOCKET_PATH = os.path.join(Config.runtime_dir(), "state.sock")
 # Sticky menu text after a decode or insertion failure; cleared by the next dictation.
 FAILURE_NOTE = "Last dictation failed"
 
-# Sticky menu text after a dictation was cut off at the configured limit.
-LIMIT_NOTE = "Recording limit reached"
-
 
 class DaemonState(str, Enum):
     LOADING = "loading"

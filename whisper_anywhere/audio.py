@@ -13,15 +13,8 @@ CHANNELS = 1
 PAREC_FORMAT = "s16le"
 PAREC_LATENCY_MS = 30
 
-# Cap a single recording so a stuck/held hotkey can't run parec forever.
-DEFAULT_MAX_RECORDING_SECONDS = 300
-
 # Per-user runtime dir (0700) instead of world-writable /tmp.
 AUDIO = os.path.join(Config.runtime_dir(), "audio.wav")
-
-
-def recording_bytes(seconds: float) -> int:
-    return int(SAMPLE_RATE * SAMPLE_WIDTH * CHANNELS * seconds)
 
 
 def stop_recording(proc: "asyncio.subprocess.Process | None") -> None:
@@ -46,31 +39,10 @@ def write_wav(
         w.writeframes(data)
 
 
-async def read_audio(
-    proc: "asyncio.subprocess.Process",
-    buffer: bytearray,
-    max_bytes: int | None = None,
-    cap_reached: "asyncio.Event | None" = None,
-) -> None:
-    """Collect PCM until parec exits, stopping it once max_bytes is reached.
-
-    The flushed tail after the stop is still drained, so no buffered speech is
-    lost. cap_reached lets the daemon transcribe at the cap instead of waiting
-    for a release that may never come.
-    """
-    limit = (
-        recording_bytes(DEFAULT_MAX_RECORDING_SECONDS)
-        if max_bytes is None
-        else max_bytes
-    )
-    capped = False
+async def read_audio(proc: "asyncio.subprocess.Process", buffer: bytearray) -> None:
+    """Collect PCM until parec exits; a recording has no length cap."""
     while True:
         chunk = await proc.stdout.read(4096)
         if not chunk:
             break
         buffer.extend(chunk)
-        if not capped and len(buffer) >= limit:
-            capped = True
-            stop_recording(proc)
-            if cap_reached is not None:
-                cap_reached.set()
