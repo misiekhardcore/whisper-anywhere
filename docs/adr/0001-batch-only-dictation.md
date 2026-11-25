@@ -38,6 +38,26 @@ the `vad_engine` config key and all live-streaming code are to be removed.
 - After the removal, `funasr` will be required only by the SenseVoice engine, not
   by the VAD model.
 
+## Amendment 2026-11-25 - no length cap on a dictation
+
+The 60 s cap was a hard, silent truncation: `read_audio()` stopped `parec` and the
+tail of the dictation was lost while the daemon still showed `recording`. The
+decision above still holds for insertion - one dictation, one insertion - but the
+single decode does not scale to long audio. SenseVoice's encoder cost grows
+quadratically with duration and it is trained on utterance-length audio, so one
+unbounded pass is slow and inaccurate, while a hard cutoff destroys speech.
+
+A hold is now cut by `segments.split_pcm()` into chunks of at most 30 s at the
+quietest frame near each boundary, every chunk is decoded by the same engine, and
+the transcripts are joined into the one insertion. Segmentation happens at the
+transcription layer, not the insertion layer, so no seam is exposed to the focused
+application.
+
+The recording itself has no cap of any kind: it continues until the hotkey is
+released, and no option or config key can cut it short. The only bound is memory,
+32 KB/s of PCM (about 115 MB per hour), which is the accepted cost of never
+blocking or truncating a dictation.
+
 ## Alternatives rejected
 
 - **Chunk-only insertion.** Closing a chunk on 0.6 s of silence splits sentences

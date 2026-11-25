@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -63,6 +63,49 @@ class TestFinishRecording:
         write_wav.assert_called_once_with(AUDIO, buffer)
         engine.transcribe.assert_called_once_with(AUDIO, language="en")
         mock_emit.assert_called_once_with("full text")
+
+    @pytest.mark.asyncio
+    async def test_a_long_recording_is_decoded_in_segments_and_emitted_once(
+        self,
+    ) -> None:
+        engine: MagicMock = MagicMock()
+        engine.transcribe.side_effect = ["hello", "world"]
+        recorder: Recorder = Recorder(engine, "en", TextOutput(False))
+
+        with (
+            patch(
+                "whisper_anywhere.recording.split_pcm",
+                return_value=[b"first", b"second"],
+            ),
+            patch("whisper_anywhere.recording.write_wav") as write_wav,
+            patch.object(TextOutput, "emit", new_callable=AsyncMock) as mock_emit,
+        ):
+            await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
+
+        assert write_wav.call_args_list == [
+            call(AUDIO, b"first"),
+            call(AUDIO, b"second"),
+        ]
+        assert engine.transcribe.call_count == 2
+        mock_emit.assert_called_once_with("hello world")
+
+    @pytest.mark.asyncio
+    async def test_a_silent_segment_contributes_no_text(self) -> None:
+        engine: MagicMock = MagicMock()
+        engine.transcribe.side_effect = ["hello", "  "]
+        recorder: Recorder = Recorder(engine, None, TextOutput(False))
+
+        with (
+            patch(
+                "whisper_anywhere.recording.split_pcm",
+                return_value=[b"first", b"second"],
+            ),
+            patch("whisper_anywhere.recording.write_wav"),
+            patch.object(TextOutput, "emit", new_callable=AsyncMock) as mock_emit,
+        ):
+            await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
+
+        mock_emit.assert_called_once_with("hello")
 
     @pytest.mark.asyncio
     async def test_empty_recording_emits_nothing(self) -> None:

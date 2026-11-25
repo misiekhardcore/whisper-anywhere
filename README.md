@@ -10,14 +10,16 @@ Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, w
 
 1. Hold a hotkey (default: `Ctrl+Super+Space`, configurable to a single key like `F12`)
 2. Speak — audio is recorded via PulseAudio
-3. Release — the engine transcribes the whole hold in one pass and the transcript is
-   inserted once: written to the clipboard and pasted with a single chord (Ctrl+V,
-   or Ctrl+Shift+V in a terminal window)
+3. Release — the engine transcribes the hold (in 30 s segments for a long one) and
+   the transcript is inserted once: written to the clipboard and pasted with a
+   single chord (Ctrl+V, or Ctrl+Shift+V in a terminal window)
 
 A dictation produces at most one transcript, and the daemon never revises text after
 it has been inserted. An empty hold, or a hold the engine hears as silence, produces
-no text. Release-to-text latency is the transcription time of the whole recording,
-which is why a single hold is capped at 60 seconds.
+no text. A hold longer than 30 seconds is decoded in segments cut at the quietest
+moment near each boundary, and the segments' transcripts are joined into that single
+insertion, so a long dictation is never cut off mid-speech. There is no limit on how
+long a hold may be: recording continues until the hotkey is released.
 
 ## Requirements
 
@@ -256,6 +258,7 @@ whisper-anywhere/
 │   ├── lock.py          # single-instance lock
 │   ├── output.py        # text output (stdout / insertion)
 │   ├── recording.py     # one recording and one transcription per dictation
+│   ├── segments.py      # cuts long PCM into engine-sized chunks at quiet points
 │   ├── state.py         # daemon state and the status socket
 │   ├── tray/            # separate tray process: appearance, socket client, GTK view
 │   ├── transcribe/      # model loading and engine registry

@@ -32,6 +32,7 @@ whisper_anywhere/
 ├── lock.py          # Lock.acquire(), Lock.release(), LOCK_PATH
 ├── output.py        # async emit() -> inserter
 ├── recording.py     # Recording, Recorder.start(), Recorder.finish()
+├── segments.py      # split_pcm(): silence-aware chunks for one decode per chunk
 ├── transcribe/      # load_engine(), Transcriber protocol, one module per engine
 └── insertion/       # TextInserter, Clipboard/WaylandClipboard/X11Clipboard,
                      # PasteChord, CompositorWindowQuery, ClipboardInserter,
@@ -71,13 +72,13 @@ whisper_anywhere/
 - `load_engine(engine_id, model_id, language)` — builds the selected engine from the `register_engine()` registry, defaulting to SenseVoice and `iic/SenseVoiceSmall`
 - `plan_engine()` — resolves engine id and model from CLI, then config, and defers the `load_engine()` call until the daemon has published loading
 - `write_wav()` — constructs a RIFF/WAV header and writes raw PCM data to a file
-- `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF
+- `read_audio()` — async task that reads raw PCM chunks from `parec --raw` stdout until EOF; a recording has no length cap, so memory grows with the hold (32 KB/s)
 - `Recorder.start()` — spawns `parec --raw` and returns a `Recording` (process, reader task, PCM buffer)
-- `Recorder.finish()` — stops `parec` via `stop_recording()`, drains the remaining audio, writes the WAV, runs the engine once over the whole recording and emits the transcript once. An empty recording, a blank transcript and an engine error all end quietly with a line on stderr.
+- `split_pcm()` — cuts a recording into chunks of at most 30 s at the quietest frame near each boundary, so long holds decode in engine-sized pieces without splitting words
+- `Recorder.finish()` — stops `parec` via `stop_recording()`, drains the remaining audio, decodes each segment in order and emits the joined transcript once. An empty recording, a blank transcript and an engine error all end quietly with a line on stderr.
 - `emit()` — async; delivers text through the resolved `TextInserter` in a worker thread (clipboard write plus one paste chord), or prints one `{"type": "final", "text": ...}` line in `--stdout` mode. An empty transcript emits nothing.
 - `ClipboardInserter.insert_text()` — writes the transcript with the session's clipboard backend, then sends one chord via `ydotool` (or `wtype`): Ctrl+V normally, Ctrl+Shift+V when `CompositorWindowQuery.is_terminal()` recognises the focused window as a terminal (`hyprctl`, then `swaymsg`; unknown reads as not a terminal). A failed write sends no chord; a failed chord leaves the transcript on the clipboard. Subprocesses run detached (`stdout=DEVNULL`) because a forked selection owner holding an inherited pipe would otherwise block forever.
-- `Daemon.run()` — async evdev read loop; a hotkey press starts a `Recorder.start()`, the matching release calls `Recorder.finish()`. One dictation is one engine call and one emission. Wrapped in a loop that re-acquires the keyboard on hotplug/`OSError`.
-- `read_audio()` caps a single recording at `MAX_RECORDING_SECONDS` (60s) so a stuck hotkey can't run `parec` forever.
+- `Daemon.run()` — async evdev read loop; a hotkey press starts a `Recorder.start()`, the matching release calls `Recorder.finish()`. One dictation is one insertion, decoded segment by segment. Wrapped in a loop that re-acquires the keyboard on hotplug/`OSError`.
 - Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample
 - `parec` is started with `--latency-msec=30` to shrink PulseAudio's internal capture buffer from ~250ms to 30ms, so the tail loss on SIGINT is imperceptible
 - Two hotkey modes: combo (Ctrl+Super+Space, all three must be held) or single-key (any `KEY_*` from `linux/input-event-codes.h`)

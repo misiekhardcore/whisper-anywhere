@@ -13,10 +13,6 @@ CHANNELS = 1
 PAREC_FORMAT = "s16le"
 PAREC_LATENCY_MS = 30
 
-# Cap a single recording so a stuck/held hotkey can't run parec forever.
-MAX_RECORDING_SECONDS = 60
-MAX_RECORDING_BYTES = SAMPLE_RATE * SAMPLE_WIDTH * CHANNELS * MAX_RECORDING_SECONDS
-
 # Per-user runtime dir (0700) instead of world-writable /tmp.
 AUDIO = os.path.join(Config.runtime_dir(), "audio.wav")
 
@@ -44,11 +40,9 @@ def write_wav(
 
 
 async def read_audio(proc: "asyncio.subprocess.Process", buffer: bytearray) -> None:
+    """Collect PCM until parec exits; a recording has no length cap."""
     while True:
         chunk = await proc.stdout.read(4096)
         if not chunk:
             break
         buffer.extend(chunk)
-        if len(buffer) >= MAX_RECORDING_BYTES:
-            stop_recording(proc)
-            break

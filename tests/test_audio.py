@@ -119,18 +119,16 @@ async def test_read_audio_large_chunks() -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_audio_caps_at_max(monkeypatch: pytest.MonkeyPatch) -> None:
-    from whisper_anywhere import audio
-
-    monkeypatch.setattr(audio, "MAX_RECORDING_BYTES", 8)
+async def test_read_audio_keeps_every_chunk_of_a_long_stream() -> None:
+    chunk: bytes = b"x" * 4096
     proc: AsyncMock = AsyncMock()
-    proc.send_signal = MagicMock()
-    proc.stdout.read.side_effect = [b"xxxx", b"xxxx", b"xxxx", b""]
+    # ~3.3 MB, well past the old 60 s cap, must all be kept.
+    proc.stdout.read.side_effect = [chunk] * 800 + [b""]
     buffer: bytearray = bytearray()
-    await audio.read_audio(proc, buffer)
-    # Cap reached after 8 bytes: parec is stopped and reading stops early.
-    proc.send_signal.assert_called_once()
-    assert len(buffer) == 8
+
+    await read_audio(proc, buffer)
+
+    assert len(buffer) == 4096 * 800
 
 
 def test_stop_recording_ignores_dead_process() -> None:

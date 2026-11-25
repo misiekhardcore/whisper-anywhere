@@ -12,6 +12,7 @@ from .audio import (
     write_wav,
 )
 from .output import TextOutput
+from .segments import split_pcm
 from .state import FAILURE_NOTE, DaemonState, NullStatus, StatePublisher
 from .transcribe import Transcriber
 
@@ -60,7 +61,7 @@ class Recorder:
         return Recording(process, reader, buffer)
 
     async def finish(self, recording: Recording) -> None:
-        """Stop capture, transcribe the whole recording once and emit the transcript once."""
+        """Stop capture, transcribe the recording in segments and emit once."""
         stop_recording(recording.process)
         await recording.reader
         await recording.process.wait()
@@ -84,7 +85,15 @@ class Recorder:
             self._status.publish(DaemonState.IDLE, FAILURE_NOTE)
 
     async def _transcribe(self, pcm: bytes | bytearray) -> str:
-        write_wav(AUDIO, pcm)
-        return await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self._engine.transcribe(AUDIO, language=self._language)
-        )
+        """Decode each segment in order and join the transcripts into one text."""
+        loop = asyncio.get_running_loop()
+        segments = await loop.run_in_executor(None, split_pcm, pcm)
+        transcripts: list[str] = []
+        for segment in segments:
+            write_wav(AUDIO, segment)
+            text: str = await loop.run_in_executor(
+                None, lambda: self._engine.transcribe(AUDIO, language=self._language)
+            )
+            if text.strip():
+                transcripts.append(text.strip())
+        return " ".join(transcripts)
