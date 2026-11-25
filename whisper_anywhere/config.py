@@ -141,6 +141,12 @@ class Config:
             action="store_true",
             help="Write transcribed text as JSON lines to stdout instead of ydotool",
         )
+        p.add_argument(
+            "--max-recording",
+            type=float,
+            default=None,
+            help="Maximum dictation length in seconds (default: 300)",
+        )
         return p.parse_args()
 
     @staticmethod

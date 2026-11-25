@@ -10,14 +10,18 @@ Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, w
 
 1. Hold a hotkey (default: `Ctrl+Super+Space`, configurable to a single key like `F12`)
 2. Speak — audio is recorded via PulseAudio
-3. Release — the engine transcribes the whole hold in one pass and the transcript is
-   inserted once: written to the clipboard and pasted with a single chord (Ctrl+V,
-   or Ctrl+Shift+V in a terminal window)
+3. Release — the engine transcribes the hold (in 30 s segments for a long one) and
+   the transcript is inserted once: written to the clipboard and pasted with a
+   single chord (Ctrl+V, or Ctrl+Shift+V in a terminal window)
 
 A dictation produces at most one transcript, and the daemon never revises text after
 it has been inserted. An empty hold, or a hold the engine hears as silence, produces
-no text. Release-to-text latency is the transcription time of the whole recording,
-which is why a single hold is capped at 60 seconds.
+no text. A hold longer than 30 seconds is decoded in segments cut at the quietest
+moment near each boundary, and the segments' transcripts are joined into that single
+insertion, so a long dictation is never cut off mid-speech. A single hold is capped
+at 300 seconds by default (`--max-recording` or `max_recording_seconds=`), and a
+recording that reaches the cap is transcribed and inserted right away with a
+"Recording limit reached" note in the tray.
 
 ## Requirements
 
@@ -170,6 +174,10 @@ hotkey=KEY_F12
 # only zh, en, yue, ja, ko — other codes are ignored (auto-detected).
 # With faster-whisper, any ISO 639-1 code works.
 # language=en
+
+# Longest single hold in seconds (default: 300). A recording that reaches
+# the limit is transcribed immediately instead of dropping the rest.
+# max_recording_seconds=300
 ```
 
 A configuration file written for an older release may still contain keys this version
@@ -185,6 +193,7 @@ whisper-anywhere --engine vosk
 whisper-anywhere --model vosk-model-small-en-us-0.15
 whisper-anywhere --model distil-small.en
 whisper-anywhere --language en          # force language (SenseVoice: zh/en/yue/ja/ko; faster-whisper: any ISO 639-1; Vosk: any ISO 639-1)
+whisper-anywhere --max-recording 600    # longest single hold in seconds (default: 300)
 whisper-anywhere --stdout               # JSON lines output (for opencode plugin)
 ```
 
@@ -256,6 +265,7 @@ whisper-anywhere/
 │   ├── lock.py          # single-instance lock
 │   ├── output.py        # text output (stdout / insertion)
 │   ├── recording.py     # one recording and one transcription per dictation
+│   ├── segments.py      # cuts long PCM into engine-sized chunks at quiet points
 │   ├── state.py         # daemon state and the status socket
 │   ├── tray/            # separate tray process: appearance, socket client, GTK view
 │   ├── transcribe/      # model loading and engine registry

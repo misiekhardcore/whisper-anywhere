@@ -160,6 +160,31 @@ class TestStartup:
 
         assert "insertion: clipboard paste" in capsys.readouterr().err
 
+    def test_the_recording_limit_comes_from_the_config(self, tmp_path: Path) -> None:
+        running: list[Daemon] = _start(tmp_path, "max_recording_seconds=90\n")
+
+        assert running[0]._max_recording_seconds == 90.0
+
+    def test_the_command_line_recording_limit_wins_over_the_config(
+        self, tmp_path: Path
+    ) -> None:
+        running: list[Daemon] = _start(
+            tmp_path,
+            "max_recording_seconds=90\n",
+            argv=["whisper-anywhere", "--stdout", "--max-recording", "45"],
+        )
+
+        assert running[0]._max_recording_seconds == 45.0
+
+    def test_an_invalid_recording_limit_stops_startup(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit) as exc:
+            _start(tmp_path, "max_recording_seconds=soon\n")
+
+        assert exc.value.code == 1
+        assert "max_recording_seconds" in capsys.readouterr().err
+
     def test_insertion_strategy_is_resolved_once_and_consumed(
         self, tmp_path: Path
     ) -> None:

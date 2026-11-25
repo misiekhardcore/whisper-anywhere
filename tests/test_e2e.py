@@ -65,7 +65,7 @@ async def drive_dictation(
     ]
     monkeypatch.setattr(Keyboard, "find_keyboards", lambda: [FakeKeyboard(events)])
 
-    async def fake_start() -> Recording:
+    async def fake_start(max_seconds: float) -> Recording:
         return Recording(
             process=_FakeRecorder(),
             reader=asyncio.create_task(asyncio.sleep(0)),

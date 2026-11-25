@@ -1,3 +1,4 @@
+import asyncio
 import struct
 import tempfile
 from pathlib import Path
@@ -119,18 +120,32 @@ async def test_read_audio_large_chunks() -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_audio_caps_at_max(monkeypatch: pytest.MonkeyPatch) -> None:
-    from whisper_anywhere import audio
-
-    monkeypatch.setattr(audio, "MAX_RECORDING_BYTES", 8)
+async def test_read_audio_signals_the_cap_and_drains_the_flush() -> None:
+    cap_reached: asyncio.Event = asyncio.Event()
     proc: AsyncMock = AsyncMock()
     proc.send_signal = MagicMock()
     proc.stdout.read.side_effect = [b"xxxx", b"xxxx", b"xxxx", b""]
     buffer: bytearray = bytearray()
-    await audio.read_audio(proc, buffer)
-    # Cap reached after 8 bytes: parec is stopped and reading stops early.
+
+    await read_audio(proc, buffer, max_bytes=8, cap_reached=cap_reached)
+
     proc.send_signal.assert_called_once()
-    assert len(buffer) == 8
+    assert cap_reached.is_set()
+    # parec is stopped at the cap, but its flushed tail is still drained.
+    assert len(buffer) == 12
+
+
+@pytest.mark.asyncio
+async def test_read_audio_does_not_signal_the_cap_below_the_limit() -> None:
+    cap_reached: asyncio.Event = asyncio.Event()
+    proc: AsyncMock = AsyncMock()
+    proc.stdout.read.side_effect = [b"xxxx", b""]
+    buffer: bytearray = bytearray()
+
+    await read_audio(proc, buffer, max_bytes=8, cap_reached=cap_reached)
+
+    assert not cap_reached.is_set()
+    assert bytes(buffer) == b"xxxx"
 
 
 def test_stop_recording_ignores_dead_process() -> None:

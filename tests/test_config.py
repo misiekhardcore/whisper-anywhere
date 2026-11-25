@@ -129,6 +129,14 @@ class TestParseArgs:
         with patch.object(sys, "argv", ["whisper-anywhere", "--engine", "sensevoice"]):
             assert Config.parse_args().engine == "sensevoice"
 
+    def test_max_recording_defaults_to_none(self) -> None:
+        with patch.object(sys, "argv", ["whisper-anywhere"]):
+            assert Config.parse_args().max_recording is None
+
+    def test_custom_max_recording(self) -> None:
+        with patch.object(sys, "argv", ["whisper-anywhere", "--max-recording", "120"]):
+            assert Config.parse_args().max_recording == 120.0
+
     def test_retired_vad_flag_is_rejected(self) -> None:
         with patch.object(sys, "argv", ["whisper-anywhere", "--vad"]):
             with pytest.raises(SystemExit) as exc:

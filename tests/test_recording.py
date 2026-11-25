@@ -1,13 +1,13 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
 from tests.helpers import _async_mock
-from whisper_anywhere.audio import AUDIO
+from whisper_anywhere.audio import AUDIO, CHANNELS, SAMPLE_RATE, SAMPLE_WIDTH
 from whisper_anywhere.output import TextOutput
 from whisper_anywhere.recording import Recorder, Recording
-from whisper_anywhere.state import FAILURE_NOTE, DaemonState, DaemonStatus
+from whisper_anywhere.state import FAILURE_NOTE, LIMIT_NOTE, DaemonState, DaemonStatus
 
 
 class _FakeProcess:
@@ -46,6 +46,23 @@ class _StatusAwareOutput:
         return self._delivered
 
 
+class TestStartRecording:
+    @pytest.mark.asyncio
+    async def test_capture_is_capped_at_the_configured_limit(self) -> None:
+        with (
+            patch(
+                "whisper_anywhere.recording.asyncio.create_subprocess_exec",
+                new=AsyncMock(),
+            ),
+            patch("whisper_anywhere.recording.read_audio", new=AsyncMock()) as read,
+        ):
+            recording: Recording = await Recorder.start(12)
+
+        bytes_per_second = SAMPLE_RATE * SAMPLE_WIDTH * CHANNELS
+        assert read.call_args.kwargs["max_bytes"] == 12 * bytes_per_second
+        assert read.call_args.kwargs["cap_reached"] is recording.cap_reached
+
+
 class TestFinishRecording:
     @pytest.mark.asyncio
     async def test_one_engine_call_over_the_whole_recording(self) -> None:
@@ -63,6 +80,71 @@ class TestFinishRecording:
         write_wav.assert_called_once_with(AUDIO, buffer)
         engine.transcribe.assert_called_once_with(AUDIO, language="en")
         mock_emit.assert_called_once_with("full text")
+
+    @pytest.mark.asyncio
+    async def test_a_long_recording_is_decoded_in_segments_and_emitted_once(
+        self,
+    ) -> None:
+        engine: MagicMock = MagicMock()
+        engine.transcribe.side_effect = ["hello", "world"]
+        recorder: Recorder = Recorder(engine, "en", TextOutput(False))
+
+        with (
+            patch(
+                "whisper_anywhere.recording.split_pcm",
+                return_value=[b"first", b"second"],
+            ),
+            patch("whisper_anywhere.recording.write_wav") as write_wav,
+            patch.object(TextOutput, "emit", new_callable=AsyncMock) as mock_emit,
+        ):
+            await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
+
+        assert write_wav.call_args_list == [
+            call(AUDIO, b"first"),
+            call(AUDIO, b"second"),
+        ]
+        assert engine.transcribe.call_count == 2
+        mock_emit.assert_called_once_with("hello world")
+
+    @pytest.mark.asyncio
+    async def test_a_silent_segment_contributes_no_text(self) -> None:
+        engine: MagicMock = MagicMock()
+        engine.transcribe.side_effect = ["hello", "  "]
+        recorder: Recorder = Recorder(engine, None, TextOutput(False))
+
+        with (
+            patch(
+                "whisper_anywhere.recording.split_pcm",
+                return_value=[b"first", b"second"],
+            ),
+            patch("whisper_anywhere.recording.write_wav"),
+            patch.object(TextOutput, "emit", new_callable=AsyncMock) as mock_emit,
+        ):
+            await recorder.finish(_recording(bytearray(b"\x00\x01" * 100)))
+
+        mock_emit.assert_called_once_with("hello")
+
+    @pytest.mark.asyncio
+    async def test_the_limit_note_is_published_when_the_cap_ended_the_recording(
+        self,
+    ) -> None:
+        publisher: _FakePublisher = _FakePublisher()
+        engine: MagicMock = MagicMock()
+        engine.transcribe.return_value = "text"
+        recorder: Recorder = Recorder(engine, None, TextOutput(False), publisher)
+
+        with (
+            patch("whisper_anywhere.recording.write_wav"),
+            patch.object(TextOutput, "emit", new_callable=AsyncMock),
+        ):
+            await recorder.finish(
+                _recording(bytearray(b"\x00\x01" * 100)), note=LIMIT_NOTE
+            )
+
+        assert publisher.published == [
+            DaemonStatus(DaemonState.PROCESSING),
+            DaemonStatus(DaemonState.IDLE, LIMIT_NOTE),
+        ]
 
     @pytest.mark.asyncio
     async def test_empty_recording_emits_nothing(self) -> None:
