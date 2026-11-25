@@ -19,6 +19,29 @@ from whisper_anywhere.insertion.clipboard import Clipboard, ClipboardContent
 
 CHORD_COMMAND: list[str] = ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"]
 WTYPE_CHORD_COMMAND: list[str] = ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"]
+TERMINAL_CHORD_COMMAND: list[str] = [
+    "ydotool",
+    "key",
+    "29:1",
+    "42:1",
+    "47:1",
+    "47:0",
+    "42:0",
+    "29:0",
+]
+WTYPE_TERMINAL_CHORD_COMMAND: list[str] = [
+    "wtype",
+    "-M",
+    "ctrl",
+    "-M",
+    "shift",
+    "-k",
+    "v",
+    "-m",
+    "shift",
+    "-m",
+    "ctrl",
+]
 
 
 def _which(*available: str):
@@ -67,14 +90,26 @@ class _FakeChord:
         self.events: list[str] = events if events is not None else []
         self._fail = fail
         self._on_send = on_send
+        self.terminals: list[bool] = []
 
-    def send(self) -> None:
+    def send(self, terminal: bool = False) -> None:
+        self.terminals.append(terminal)
         if self._fail:
             raise ChordError("ydotool key failed (exit 1)")
         self.sent += 1
         self.events.append("chord")
         if self._on_send is not None:
             self._on_send()
+
+
+class _FakeFocusedWindow:
+    def __init__(self, terminal: bool) -> None:
+        self._terminal = terminal
+        self.queries: int = 0
+
+    def is_terminal(self) -> bool:
+        self.queries += 1
+        return self._terminal
 
 
 class _FakePause:
@@ -93,9 +128,9 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard(events=events)
         chord: _FakeChord = _FakeChord(events=events)
 
-        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
-            ""
-        )
+        delivered = ClipboardInserter(
+            clipboard, chord, _FakeFocusedWindow(False), _FakePause(events)
+        ).insert_text("")
 
         assert delivered is False
         assert clipboard.events == []
@@ -106,9 +141,9 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
         chord: _FakeChord = _FakeChord(events=events)
 
-        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
-            "hello"
-        )
+        delivered = ClipboardInserter(
+            clipboard, chord, _FakeFocusedWindow(False), _FakePause(events)
+        ).insert_text("hello")
 
         assert delivered is True
         assert clipboard.writes == ["hello", "copied earlier"]
@@ -119,7 +154,9 @@ class TestClipboardInserter:
         chord: _FakeChord = _FakeChord(events=events)
         pause: _FakePause = _FakePause(events)
 
-        delivered = ClipboardInserter(clipboard, chord, pause).insert_text("hello")
+        delivered = ClipboardInserter(
+            clipboard, chord, _FakeFocusedWindow(False), pause
+        ).insert_text("hello")
 
         assert delivered is True
         assert events == [
@@ -140,9 +177,9 @@ class TestClipboardInserter:
             on_send=lambda: clipboard.replace_externally("something else"),
         )
 
-        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
-            "hello"
-        )
+        delivered = ClipboardInserter(
+            clipboard, chord, _FakeFocusedWindow(False), _FakePause(events)
+        ).insert_text("hello")
 
         assert delivered is True
         assert clipboard.writes == ["hello"]
@@ -153,9 +190,9 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard(None, events=events)
         chord: _FakeChord = _FakeChord(events=events)
 
-        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
-            "hello"
-        )
+        delivered = ClipboardInserter(
+            clipboard, chord, _FakeFocusedWindow(False), _FakePause(events)
+        ).insert_text("hello")
 
         assert delivered is True
         assert clipboard.writes == ["hello"]
@@ -170,9 +207,9 @@ class TestClipboardInserter:
         )
         chord: _FakeChord = _FakeChord(events=events)
 
-        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
-            "hello"
-        )
+        delivered = ClipboardInserter(
+            clipboard, chord, _FakeFocusedWindow(False), _FakePause(events)
+        ).insert_text("hello")
 
         assert delivered is False
         assert chord.sent == 0
@@ -188,9 +225,9 @@ class TestClipboardInserter:
         clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
         chord: _FakeChord = _FakeChord(fail=True, events=events)
 
-        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
-            "hello"
-        )
+        delivered = ClipboardInserter(
+            clipboard, chord, _FakeFocusedWindow(False), _FakePause(events)
+        ).insert_text("hello")
 
         assert delivered is False
         assert clipboard.writes == ["hello"]
@@ -198,6 +235,32 @@ class TestClipboardInserter:
         err: str = capsys.readouterr().err
         assert "Paste chord failed" in err
         assert "transcript left on the clipboard" in err
+
+    def test_terminal_window_gets_the_terminal_chord(self) -> None:
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
+        chord: _FakeChord = _FakeChord(events=events)
+        focused_window: _FakeFocusedWindow = _FakeFocusedWindow(True)
+
+        delivered = ClipboardInserter(
+            clipboard, chord, focused_window, _FakePause(events)
+        ).insert_text("hello")
+
+        assert delivered is True
+        assert chord.terminals == [True]
+        assert focused_window.queries == 1
+
+    def test_non_terminal_window_gets_the_ordinary_chord(self) -> None:
+        events: list[str] = []
+        clipboard: _FakeClipboard = _FakeClipboard("copied earlier", events=events)
+        chord: _FakeChord = _FakeChord(events=events)
+
+        delivered = ClipboardInserter(
+            clipboard, chord, _FakeFocusedWindow(False), _FakePause(events)
+        ).insert_text("hello")
+
+        assert delivered is True
+        assert chord.terminals == [False]
 
     def test_failed_restore_reports_and_keeps_the_transcript(
         self, capsys: pytest.CaptureFixture[str]
@@ -208,9 +271,9 @@ class TestClipboardInserter:
         )
         chord: _FakeChord = _FakeChord(events=events)
 
-        delivered = ClipboardInserter(clipboard, chord, _FakePause(events)).insert_text(
-            "hello"
-        )
+        delivered = ClipboardInserter(
+            clipboard, chord, _FakeFocusedWindow(False), _FakePause(events)
+        ).insert_text("hello")
 
         assert delivered is True
         assert chord.sent == 1
@@ -320,6 +383,20 @@ class TestChords:
 
         assert run.call_args.args[0] == WTYPE_CHORD_COMMAND
 
+    def test_ydotool_sends_ctrl_shift_v_for_a_terminal(self) -> None:
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            YdotoolChord().send(terminal=True)
+
+        assert run.call_args.args[0] == TERMINAL_CHORD_COMMAND
+
+    def test_wtype_sends_ctrl_shift_v_for_a_terminal(self) -> None:
+        with patch("subprocess.run") as run:
+            run.return_value = MagicMock(returncode=0)
+            WtypeChord().send(terminal=True)
+
+        assert run.call_args.args[0] == WTYPE_TERMINAL_CHORD_COMMAND
+
     def test_ydotool_missing_names_package(self) -> None:
         with patch("subprocess.run", side_effect=FileNotFoundError):
             with pytest.raises(ChordError) as exc:
@@ -418,12 +495,34 @@ class TestSelectInsertion:
             run.side_effect = [
                 MagicMock(returncode=0, stdout="image/png\n"),
                 MagicMock(returncode=0),
+                MagicMock(returncode=0, stdout='{"class": "firefox", "title": ""}'),
                 MagicMock(returncode=0),
             ]
             selection.inserter.insert_text("hello")
 
         commands: list[list[str]] = [call.args[0] for call in run.call_args_list]
         assert commands[-1] == WTYPE_CHORD_COMMAND
+
+    def test_clipboard_chord_pastes_into_a_terminal_with_ctrl_shift_v(self) -> None:
+        selection = select_insertion(
+            which=_which("wl-copy", "wl-paste", "ydotool"),
+            session_type="wayland",
+        )
+
+        assert isinstance(selection.inserter, ClipboardInserter)
+        with patch("subprocess.run") as run:
+            run.side_effect = [
+                MagicMock(returncode=0, stdout="image/png\n"),
+                MagicMock(returncode=0),
+                MagicMock(
+                    returncode=0, stdout='{"class": "kitty", "title": "~/Projects"}'
+                ),
+                MagicMock(returncode=0),
+            ]
+            selection.inserter.insert_text("hello")
+
+        commands: list[list[str]] = [call.args[0] for call in run.call_args_list]
+        assert commands[-1] == TERMINAL_CHORD_COMMAND
 
     def test_no_chord_injector_reports_ydotool(self) -> None:
         selection = select_insertion(

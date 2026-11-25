@@ -11,7 +11,8 @@ Offline, local voice dictation for Linux using SenseVoice (FunASR) by default, w
 1. Hold a hotkey (default: `Ctrl+Super+Space`, configurable to a single key like `F12`)
 2. Speak — audio is recorded via PulseAudio
 3. Release — the engine transcribes the whole hold in one pass and the transcript is
-   inserted once: written to the clipboard and pasted with a single Ctrl+V chord
+   inserted once: written to the clipboard and pasted with a single chord (Ctrl+V,
+   or Ctrl+Shift+V in a terminal window)
 
 A dictation produces at most one transcript, and the daemon never revises text after
 it has been inserted. An empty hold, or a hold the engine hears as silence, produces
@@ -119,6 +120,14 @@ The transcript is written to the system clipboard and a single paste chord is se
 so the focused application receives one paste instead of a keystroke stream. The
 preferred path is `wl-copy`/`wl-paste` (Wayland) plus `ydotool` sending Ctrl+V;
 `wtype` sends the chord only when `ydotool` is absent.
+
+A terminal window needs Ctrl+Shift+V, so the chord asks the compositor what the
+focused window is: `hyprctl` first and `swaymsg` second. A recognised terminal
+gets Ctrl+Shift+V; every other window gets Ctrl+V. The query is best effort and
+bounded by a short timeout, so a missing tool, a failed or slow answer or output
+that cannot be parsed all fall back to Ctrl+V without an error. GNOME and KDE
+expose no focused-window query, so sessions running them always get Ctrl+V, and
+dictating into a terminal there needs a manual paste.
 
 Dictating does not cost you your clipboard. The clipboard text you had before
 dictating is restored after the paste lands, but only while the clipboard still

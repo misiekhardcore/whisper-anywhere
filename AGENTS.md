@@ -34,7 +34,8 @@ whisper_anywhere/
 ├── recording.py     # Recording, Recorder.start(), Recorder.finish()
 ├── transcribe/      # load_engine(), Transcriber protocol, one module per engine
 └── insertion/       # TextInserter, Clipboard/WaylandClipboard, PasteChord,
-                     # ClipboardInserter, TypingInserter, select_insertion()
+                     # CompositorWindowQuery, ClipboardInserter, TypingInserter,
+                     # select_insertion()
 ```
 
 ## System dependencies (apt only)
@@ -73,7 +74,7 @@ whisper_anywhere/
 - `Recorder.start()` — spawns `parec --raw` and returns a `Recording` (process, reader task, PCM buffer)
 - `Recorder.finish()` — stops `parec` via `stop_recording()`, drains the remaining audio, writes the WAV, runs the engine once over the whole recording and emits the transcript once. An empty recording, a blank transcript and an engine error all end quietly with a line on stderr.
 - `emit()` — async; delivers text through the resolved `TextInserter` in a worker thread (clipboard write plus one paste chord, or typing), or prints one `{"type": "final", "text": ...}` line in `--stdout` mode. An empty transcript emits nothing.
-- `ClipboardInserter.insert_text()` — writes the transcript with `wl-copy`, then sends one Ctrl+V chord via `ydotool` (or `wtype`). A failed write sends no chord; a failed chord leaves the transcript on the clipboard. Subprocesses run detached (`stdout=DEVNULL`) because a forked selection owner holding an inherited pipe would otherwise block forever.
+- `ClipboardInserter.insert_text()` — writes the transcript with `wl-copy`, then sends one chord via `ydotool` (or `wtype`): Ctrl+V normally, Ctrl+Shift+V when `CompositorWindowQuery.is_terminal()` recognises the focused window as a terminal (`hyprctl`, then `swaymsg`; unknown reads as not a terminal). A failed write sends no chord; a failed chord leaves the transcript on the clipboard. Subprocesses run detached (`stdout=DEVNULL`) because a forked selection owner holding an inherited pipe would otherwise block forever.
 - `Daemon.run()` — async evdev read loop; a hotkey press starts a `Recorder.start()`, the matching release calls `Recorder.finish()`. One dictation is one engine call and one emission. Wrapped in a loop that re-acquires the keyboard on hotplug/`OSError`.
 - `read_audio()` caps a single recording at `MAX_RECORDING_SECONDS` (60s) so a stuck hotkey can't run `parec` forever.
 - Audio capture uses a pipe (`parec --raw` to `asyncio.subprocess.PIPE`) instead of a file — when `parec` stops (SIGINT), Python drains the pipe to EOF, capturing every last buffered sample

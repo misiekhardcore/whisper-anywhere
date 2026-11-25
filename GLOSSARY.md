@@ -21,7 +21,10 @@ focused application, and the tray only observes the daemon.
   when `ydotool` is absent.
 - **Typing insertion** - injecting one key event per character through `ydotool`
   or `wtype`. Fallback used only when clipboard insertion is unavailable.
-- **Paste chord** - the key combination that pastes: Ctrl+V.
+- **Paste chord** - the key combination that pastes: Ctrl+V, or Ctrl+Shift+V when
+  the focused window is a terminal.
+- **Focused-window query** - the best-effort `hyprctl` / `swaymsg` question that
+  decides whether the focused window is a terminal. Unknown reads as not a terminal.
 - **Engine** - a transcription backend implementing `Transcriber`
   (SenseVoice, faster-whisper, Vosk).
 - **Runtime directory** - the private directory holding the lock, the status
