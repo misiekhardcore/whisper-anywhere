@@ -5,37 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
+## [1.2.0] - 2026-11-25
 ### Added
 
-- The tray menu has a "Start at login" item that reads the two user units whenever the menu opens and enables or disables them
+- Paste through the X11 clipboard and drop typing insertion
+- Paste into terminal windows with Ctrl+Shift+V
 
 ### Changed
 
-- A dictation is transcribed once, over the whole hotkey hold, and inserted once; the streaming mode that retyped text while you were still speaking is gone
-- `--stdout` prints exactly one `{"type": "final", "text": ...}` line per dictation. This is a breaking change for line consumers: the `{"type": "partial", ...}` lines no longer exist, so react to final lines only
-- The dependency check requires `funasr` only for the SenseVoice engine
-- Insertion writes the transcript to the clipboard and sends one paste chord (Ctrl+V through `ydotool`, or `wtype` when `ydotool` is absent) instead of typing every character, and it is the only mechanism: a missing clipboard backend or chord injector now stops startup with the package to install
-- The transcript is left on the clipboard after a successful paste
-- The dependency check and installer name the clipboard backend and chord injector
-- `install.sh` installs the Python stack of the configured engine only, and pre-loads the SenseVoice model only for the SenseVoice engine; `ENGINE` picks the engine for a fresh install
+- Engine-aware installs and a tray Start at login item
+- Installer ships the tray and picks a supported Python
+- Report a failed dictation instead of returning to idle silently
+- Publish loading before the model download
+- Show the dictation state in a tray indicator
+- Restore the clipboard after a paste
+- Transcribe and emit one dictation exactly once
+- Paste the transcript through the Wayland clipboard
+- Upgrade all dependencies and lock GitHub Actions
 
-### Removed
+### Documentation
 
-- The streaming transcription mode, its speech-detection model, the `--vad` flag, and the `vad_engine` / `vad` configuration keys. Config files that still contain those keys keep starting; they are ignored
-- Backspacing and retyping already-inserted text, which the `Typer` implementations no longer offer
-- The `wtype` compositor probe that injected a stray Ctrl keystroke into the focused window at startup; tool presence and session type now decide insertion
-- Typing insertion (`ydotool type` / `wtype` text) and its `TypingInserter`; the transcript is always pasted, never typed
+- Point the agent notes at the symbols that exist
 
 ### Fixed
 
-- `install.sh` performs the editable install from the primary worktree, so the console scripts cannot end up importing a worktree that is later removed
-- `install.sh` checks that the package it installed imports from outside the source tree, and fails instead of reporting success when it does not
-- `install.sh` asks `dpkg` first, so it skips apt and the privilege prompt when every system package is already present
-- The installer summary reports the hotkey from the config instead of always claiming the default combo
-- `--stdout` is honoured when passed as a flag again; the mode check used to treat the boolean flag as one of the `1`/`true`/`yes` config strings
+- Add missing packages
 
+### Testing
+
+- Close the #48 acceptance gaps and drop the AGENTS.md merge markers
 ## [1.1.3] - 2026-10-13
 
 ### Fixed
