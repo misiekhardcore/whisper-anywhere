@@ -7,6 +7,7 @@ from .base import TextInserter
 from .chord import PasteChord, WtypeChord, YdotoolChord
 from .clipboard import WL_CLIPBOARD_INSTALL, WaylandClipboard
 from .clipboard_inserter import ClipboardInserter
+from .focused_window import CompositorWindowQuery
 from .typing import TypingInserter
 
 Which = Callable[[str], str | None]
@@ -54,7 +55,7 @@ def select_insertion(
         clipboard_problem = f"wl-copy/wl-paste not found — {WL_CLIPBOARD_INSTALL}"
     else:
         return InsertionSelection(
-            ClipboardInserter(WaylandClipboard(), chord),
+            ClipboardInserter(WaylandClipboard(), chord, CompositorWindowQuery()),
             f"clipboard paste ({chord.TOOL} + wl-clipboard)",
             None,
         )

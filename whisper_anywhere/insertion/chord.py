@@ -1,7 +1,9 @@
 import subprocess
 from abc import ABC, abstractmethod
 
-CTRL_V_KEYCODES: tuple[int, int] = (29, 47)
+CTRL_KEYCODE = 29
+SHIFT_KEYCODE = 42
+V_KEYCODE = 47
 
 
 class ChordError(Exception):
@@ -9,12 +11,12 @@ class ChordError(Exception):
 
 
 class PasteChord(ABC):
-    """Sends the ordinary paste chord, Ctrl+V, as a single chord."""
+    """Sends the paste chord as a single chord: Ctrl+V, or Ctrl+Shift+V in a terminal."""
 
     TOOL: str
 
     @abstractmethod
-    def send(self) -> None:
+    def send(self, terminal: bool = False) -> None:
         """Send the chord; raises ``ChordError``."""
 
     def _run(self, command: list[str]) -> None:
@@ -39,9 +41,14 @@ class PasteChord(ABC):
 class YdotoolChord(PasteChord):
     TOOL = "ydotool"
 
-    def send(self) -> None:
-        ctrl, v = CTRL_V_KEYCODES
-        self._run(["ydotool", "key", f"{ctrl}:1", f"{v}:1", f"{v}:0", f"{ctrl}:0"])
+    def send(self, terminal: bool = False) -> None:
+        if terminal:
+            sequence = [CTRL_KEYCODE, SHIFT_KEYCODE, V_KEYCODE]
+        else:
+            sequence = [CTRL_KEYCODE, V_KEYCODE]
+        pressed = [f"{key}:1" for key in sequence]
+        released = [f"{key}:0" for key in reversed(sequence)]
+        self._run(["ydotool", "key", *pressed, *released])
 
     def _failure_message(self, returncode: int) -> str:
         return (
@@ -53,5 +60,21 @@ class YdotoolChord(PasteChord):
 class WtypeChord(PasteChord):
     TOOL = "wtype"
 
-    def send(self) -> None:
-        self._run(["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"])
+    def send(self, terminal: bool = False) -> None:
+        if terminal:
+            command = [
+                "wtype",
+                "-M",
+                "ctrl",
+                "-M",
+                "shift",
+                "-k",
+                "v",
+                "-m",
+                "shift",
+                "-m",
+                "ctrl",
+            ]
+        else:
+            command = ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"]
+        self._run(command)

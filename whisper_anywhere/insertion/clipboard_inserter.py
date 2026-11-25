@@ -5,6 +5,7 @@ from time import sleep
 from .base import TextInserter
 from .chord import ChordError, PasteChord
 from .clipboard import Clipboard, ClipboardError
+from .focused_window import FocusedWindowQuery
 
 # How long the paste chord gets to land before the clipboard is touched again.
 _SETTLE_DELAY_SECONDS = 0.2
@@ -17,10 +18,12 @@ class ClipboardInserter(TextInserter):
         self,
         clipboard: Clipboard,
         chord: PasteChord,
+        focused_window: FocusedWindowQuery,
         pause: Callable[[float], None] = sleep,
     ) -> None:
         self._clipboard = clipboard
         self._chord = chord
+        self._focused_window = focused_window
         self._pause = pause
 
     def insert_text(self, text: str) -> bool:
@@ -39,7 +42,7 @@ class ClipboardInserter(TextInserter):
             print(f"Clipboard insertion failed: {exc}", file=sys.stderr)
             return False
         try:
-            self._chord.send()
+            self._chord.send(terminal=self._focused_window.is_terminal())
         except ChordError as exc:
             print(
                 f"Paste chord failed: {exc} — transcript left on the clipboard",
